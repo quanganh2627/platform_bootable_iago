@@ -1,0 +1,5 @@
+on fs
+    mount squashfs loop@/installmedia/images/system.sfs /system ro nosuid nodev
+    mount tmpfs tmpfs /data
+    mount tmpfs tmpfs /cache
+
