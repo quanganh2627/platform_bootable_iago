@@ -58,6 +58,7 @@ $(iago_ramdisk): \
 	$(hide) $(ACP) $(LOCAL_PATH)/init.iago.rc $(iago_ramdisk_root)
 	$(hide) mkdir -p $(iago_ramdisk_root)/installmedia
 	$(hide) echo "import init.iago.rc" >> $(iago_ramdisk_root)/init.rc
+	$(hide) rm -f $(iago_ramdisk_root)/init.$(BOARD_BOOTMEDIA).rc
 	$(hide) $(MKBOOTFS) $(iago_ramdisk_root) | $(MINIGZIP) > $@
 
 # TODO: Add 'genisoimage' to the build
