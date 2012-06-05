@@ -31,8 +31,36 @@
 #define INSTALL_MOUNT   "/installmedia"
 #define TMP_NODE        "/dev/__iago_blkdev"
 
-#define dbg(x...)       do { KLOG_ERROR("iago", x); } while (0);
-#define dbg_perror(x)   do { KLOG_ERROR("iago", "%s: %s", x, strerror(errno)); } while (0);
+#define dbg(fmt, ...)       KLOG_ERROR("iago", "%s(): " fmt, __func__, ##__VA_ARGS__)
+#define dbg_perror(x)       dbg("%s: %s\n", x, strerror(errno))
+
+int is_iso9660(const char *path)
+{
+    int fd;
+    char buf[5];
+    int ret = 0;
+
+    fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        dbg_perror("open");
+        return 0;
+    }
+
+    if (lseek(fd, 16 * 2048 + 1, SEEK_SET) < 0) {
+        dbg_perror("lseek");
+        goto out;
+    }
+    if (read(fd, buf, 5) != 5) {
+        dbg_perror("read");
+        goto out;
+    }
+    if (!memcmp(buf, "CD001", 5))
+        ret = 1;
+out:
+    close(fd);
+    return ret;
+}
+
 
 int is_install_media(char *name)
 {
@@ -44,7 +72,7 @@ int is_install_media(char *name)
     int ret = 0;
     struct stat statbuf;
 
-    dbg("examining %s\n", name);
+    dbg("------> examining %s\n", name);
 
     /* Read the "dev" node in the sysfs dir which has major:minor
      * and create a temp device node to work with */
@@ -71,10 +99,16 @@ int is_install_media(char *name)
         dbg_perror("mknod");
         return 0;
     }
+
+    if (!is_iso9660(TMP_NODE)) {
+        dbg("Not an iso9660 volume\n");
+        goto out_unlink;
+    }
+
+    dbg("Mounting device %d:%d as iso9660\n", major(dev), minor(dev));
     /* Try to mount an iso9660 fs */
     if (mount(TMP_NODE, INSTALL_MOUNT, "iso9660", MS_RDONLY, "")) {
-        /* If this fails, must not have been our device */
-        //dbg_perror("mount");
+        dbg_perror("mount");
         goto out_unlink;
     }
 
@@ -110,12 +144,11 @@ int mount_cdrom(void)
         struct dirent *dp = readdir(dir);
         if (!dp)
             break;
-        if (!strncmp(dp->d_name, ".", 1))
+        if (!strncmp(dp->d_name, ".", 1) ||
+                !strncmp(dp->d_name, "ram", 3) ||
+                !strncmp(dp->d_name, "loop", 4)) {
             continue;
-        if (!strncmp(dp->d_name, "ram", 3))
-            continue;
-        if (!strncmp(dp->d_name, "loop", 4))
-            continue;
+        }
 
         snprintf(path, sizeof(path), "/sys/block/%s/", dp->d_name);
         if (is_install_media(path)) {
@@ -168,10 +201,11 @@ int main(void)
 
         if (count--) {
             sleep(2);
+            dbg("Iago media not found, trying again...\n");
             continue;
         }
         dbg("Couldn't find Iago media!\n");
-        exit(1);
+        exit(1); /* will result in kernel panic */
     }
 
     umount("/dev");
