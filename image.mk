@@ -6,6 +6,8 @@ iago_base := $(PRODUCT_OUT)/iago
 iago_ramdisk_root := $(iago_base)/ramdisk
 iago_iso_root := $(iago_base)/root
 iago_ramdisk := $(iago_base)/ramdisk.img
+iago_images_root := $(iago_base)/images
+iago_images_sfs := $(iago_base)/images.sfs
 iago_iso_image := $(PRODUCT_OUT)/liveimg.iso
 
 system_sfs := $(iago_base)/system.sfs
@@ -15,22 +17,14 @@ define create-sfs
 	$(hide) PATH=/sbin:/usr/sbin:$(PATH) mksquashfs $(1) $(2) -no-recovery -noappend
 endef
 
-$(system_sfs): $(INSTALLED_SYSTEMIMAGE)
-	$(hide) mkdir -p $(dir $@)
-	$(call create-sfs,$(TARGET_OUT),$@)
-
-$(data_sfs): $(INSTALLED_USERDATAIMAGE_TARGET)
-	$(hide) mkdir -p $(dir $@)
-	$(call create-sfs,$(TARGET_OUT_DATA),$@)
-
-iago_images := \
-	$(system_sfs) \
-	$(data_sfs) \
+iago_images_deps := \
+        $(INSTALLED_SYSTEMIMAGE) \
+        $(INSTALLED_USERDATAIMAGE_TARGET) \
 	$(INSTALLED_BOOTIMAGE_TARGET) \
 	$(INSTALLED_RECOVERYIMAGE_TARGET) \
 
 ifeq ($(TARGET_STAGE_DROIDBOOT),true)
-iago_images += $(DROIDBOOT_BOOTIMAGE)
+iago_images_deps += $(DROIDBOOT_BOOTIMAGE)
 endif
 
 iago_isolinux_files := \
@@ -38,6 +32,16 @@ iago_isolinux_files := \
 	$(SYSLINUX_BASE)/vesamenu.c32 \
 	$(LOCAL_PATH)/splash.png \
 	$(iago_base)/isolinux.cfg \
+
+$(iago_images_sfs): \
+		$(iago_images_deps) \
+		| $(ACP) \
+
+	$(hide) rm -rf $(iago_images_root)
+	$(hide) mkdir -p $(iago_images_root)
+	$(hide) mkdir -p $(dir $@)
+	$(hide) $(ACP) -f $(iago_images_deps) $(iago_images_root)
+	$(call create-sfs,$(iago_images_root),$@)
 
 $(iago_base)/isolinux.cfg: $(LOCAL_PATH)/isolinux.cfg
 	$(hide) mkdir -p $(iago_base)
@@ -65,7 +69,7 @@ $(iago_ramdisk): \
 $(iago_iso_image): \
 		$(LOCAL_PATH)/image.mk \
 		$(iago_ramdisk) \
-		$(iago_images) \
+		$(iago_images_sfs) \
 		$(iago_isolinux_files) \
 		$(INSTALLED_KERNEL_TARGET) \
 		$(HOST_OUT_EXECUTABLES)/isohybrid \
@@ -76,9 +80,9 @@ $(iago_iso_image): \
 	$(hide) $(ACP) -f $(iago_ramdisk) $(iago_iso_root)/ramdisk.img
 	$(hide) $(ACP) -f $(INSTALLED_KERNEL_TARGET) $(iago_iso_root)/kernel
 	$(hide) touch $(iago_iso_root)/iago-cookie
-	$(hide) mkdir -p $(iago_iso_root)/images
-	$(hide) $(ACP) -f $(iago_images) $(iago_iso_root)/images
+	$(hide) $(ACP) -f $(iago_images_sfs) $(iago_iso_root)
 	$(hide) mkdir -p $(iago_iso_root)/isolinux
+	$(hide) mkdir -p $(iago_iso_root)/images
 	$(hide) $(ACP) -f $(iago_isolinux_files) $(iago_iso_root)/isolinux/
 	$(hide) genisoimage -vJURT -b isolinux/isolinux.bin -c isolinux/boot.cat \
 		-no-emul-boot -boot-load-size 4 -boot-info-table \
