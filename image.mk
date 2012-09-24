@@ -55,10 +55,10 @@ $(iago_ramdisk): \
 	$(hide) $(ACP) -rf $(TARGET_ROOT_OUT)/* $(iago_ramdisk_root)
 	$(hide) mv $(iago_ramdisk_root)/init $(iago_ramdisk_root)/init2
 	$(hide) $(ACP) $(iago_base)/preinit $(iago_ramdisk_root)/init
-	$(hide) $(ACP) $(LOCAL_PATH)/init.iago.rc $(iago_ramdisk_root)
 	$(hide) mkdir -p $(iago_ramdisk_root)/installmedia
 	$(hide) echo "import init.iago.rc" >> $(iago_ramdisk_root)/init.rc
-	$(hide) rm -f $(iago_ramdisk_root)/init.$(BOARD_BOOTMEDIA).rc
+	$(hide) sed -i -r 's/^[\t ]*(mount_all|mount yaffs|mount ext).*//g' $(iago_ramdisk_root)/init*.rc
+	$(hide) $(ACP) $(LOCAL_PATH)/init.iago.rc $(iago_ramdisk_root)
 	$(hide) $(MKBOOTFS) $(iago_ramdisk_root) | $(MINIGZIP) > $@
 
 # TODO: Add 'genisoimage' to the build
