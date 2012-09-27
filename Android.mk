@@ -15,3 +15,5 @@ LOCAL_UNSTRIPPED_PATH := $(PRODUCT_OUT)/iago/debug
 include $(BUILD_EXECUTABLE)
 
 endif # TARGET_USE_IAGO
+
+include $(call all-subdir-makefiles)

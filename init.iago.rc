@@ -3,4 +3,3 @@ on fs
     mount ext4 loop@/installmedia/images/system.img /system ro nosuid nodev
     mount tmpfs tmpfs /data
     mount tmpfs tmpfs /cache
-

@@ -27,6 +27,19 @@ ifeq ($(TARGET_STAGE_DROIDBOOT),true)
 iago_images_deps += $(DROIDBOOT_BOOTIMAGE)
 endif
 
+ifeq ($(TARGET_USE_SYSLINUX),true)
+iago_images_syslinux_files = $(TARGET_SYSLINUX_FILES)
+iago_images_syslinux_bin = \
+        $(call intermediates-dir-for,EXECUTABLES,android_syslinux)/android_syslinux
+
+ifneq ($(TARGET_SYSLINUX_CONFIG_TEMPLATE),)
+iago_images_syslinux_conf = $(TARGET_SYSLINUX_CONFIG_TEMPLATE)
+else
+$(warning TARGET_SYSLINUX_CONFIG_TEMPLATE is not set. Installer may not be able to generate correct SYSLINUX config file.)
+endif
+
+endif # TARGET_USE_SYSLINUX
+
 iago_isolinux_files := \
 	$(SYSLINUX_BASE)/isolinux.bin \
 	$(SYSLINUX_BASE)/vesamenu.c32 \
@@ -35,12 +48,29 @@ iago_isolinux_files := \
 
 $(iago_images_sfs): \
 		$(iago_images_deps) \
+		$(iago_images_syslinux_files) \
+		$(iago_images_syslinux_conf) \
+		$(iago_images_syslinux_bin) \
 		| $(ACP) \
 
 	$(hide) rm -rf $(iago_images_root)
 	$(hide) mkdir -p $(iago_images_root)
 	$(hide) mkdir -p $(dir $@)
 	$(hide) $(ACP) -f $(iago_images_deps) $(iago_images_root)
+ifeq ($(TARGET_USE_SYSLINUX),true)
+	$(hide) mkdir -p $(iago_images_root)/syslinux
+	$(hide) mkdir -p $(iago_images_root)/syslinux/files
+	$(hide) mkdir -p $(iago_images_root)/syslinux/bin
+	$(hide) $(ACP) -f $(iago_images_syslinux_files) \
+		$(iago_images_root)/syslinux/files
+ifneq ($(TARGET_SYSLINUX_CONFIG_TEMPLATE),)
+	$(hide) $(ACP) -f $(iago_images_syslinux_conf) \
+		$(iago_images_root)/syslinux/files/syslinux.cfg
+endif
+	$(hide) $(ACP) -f $(iago_images_syslinux_bin) \
+		$(iago_images_root)/syslinux/bin
+	$(hide) chmod 0755 $(iago_images_root)/syslinux/bin/*
+endif
 	$(call create-sfs,$(iago_images_root),$@)
 
 $(iago_base)/isolinux.cfg: $(LOCAL_PATH)/isolinux.cfg
@@ -60,6 +90,7 @@ $(iago_ramdisk): \
 	$(hide) mv $(iago_ramdisk_root)/init $(iago_ramdisk_root)/init2
 	$(hide) $(ACP) $(iago_base)/preinit $(iago_ramdisk_root)/init
 	$(hide) mkdir -p $(iago_ramdisk_root)/installmedia
+	$(hide) mkdir -p $(iago_ramdisk_root)/tmp
 	$(hide) echo "import init.iago.rc" >> $(iago_ramdisk_root)/init.rc
 	$(hide) sed -i -r 's/^[\t ]*(mount_all|mount yaffs|mount ext).*//g' $(iago_ramdisk_root)/init*.rc
 	$(hide) $(ACP) $(LOCAL_PATH)/init.iago.rc $(iago_ramdisk_root)
