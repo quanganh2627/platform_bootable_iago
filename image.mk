@@ -18,10 +18,23 @@ define create-sfs
 endef
 
 iago_images_deps := \
-        $(INSTALLED_SYSTEMIMAGE) \
         $(INSTALLED_USERDATAIMAGE_TARGET) \
 	$(INSTALLED_BOOTIMAGE_TARGET) \
 	$(INSTALLED_RECOVERYIMAGE_TARGET) \
+
+ifeq ($(TARGET_USERIMAGES_SPARSE_EXT_DISABLED),false)
+# need to convert sparse images back to normal ext4
+iago_sparse_images_deps += \
+	$(INSTALLED_SYSTEMIMAGE) \
+
+iago_images_deps_bin += \
+	$(HOST_OUT_EXECUTABLES)/simg2img \
+
+else
+iago_images_deps += \
+	$(INSTALLED_SYSTEMIMAGE) \
+
+endif
 
 ifeq ($(TARGET_STAGE_DROIDBOOT),true)
 iago_images_deps += $(DROIDBOOT_BOOTIMAGE)
@@ -48,6 +61,8 @@ iago_isolinux_files := \
 
 $(iago_images_sfs): \
 		$(iago_images_deps) \
+		$(iago_images_deps_bin) \
+		$(iago_sparse_images_deps) \
 		$(iago_images_syslinux_files) \
 		$(iago_images_syslinux_conf) \
 		$(iago_images_syslinux_bin) \
@@ -57,6 +72,11 @@ $(iago_images_sfs): \
 	$(hide) mkdir -p $(iago_images_root)
 	$(hide) mkdir -p $(dir $@)
 	$(hide) $(ACP) -f $(iago_images_deps) $(iago_images_root)
+ifeq ($(TARGET_USERIMAGES_SPARSE_EXT_DISABLED),false)
+	$(hide) $(foreach _simg,$(iago_sparse_images_deps), \
+		$(HOST_OUT_EXECUTABLES)/simg2img $(_simg) $(iago_images_root)/`basename $(_simg)`; \
+		)
+endif
 ifeq ($(TARGET_USE_SYSLINUX),true)
 	$(hide) mkdir -p $(iago_images_root)/syslinux
 	$(hide) mkdir -p $(iago_images_root)/syslinux/files
