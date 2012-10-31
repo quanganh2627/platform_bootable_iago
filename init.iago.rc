@@ -1,5 +1,16 @@
 on fs
     mount squashfs loop@/installmedia/images.sfs /installmedia/images ro
     mount ext4 loop@/installmedia/images/system.img /system ro nosuid nodev
+    mount tmpfs tmpfs /tmp
     mount tmpfs tmpfs /data
     mount tmpfs tmpfs /cache
+
+on boot
+    start iagod
+
+service iagod /installmedia/images/iagod
+    class iago
+    user root
+    console
+    oneshot
+

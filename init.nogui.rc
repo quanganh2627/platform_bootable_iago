@@ -1,0 +1,53 @@
+import /init.iago.rc
+import /init.usb.rc
+import /init.trace.rc
+
+on early-init
+    start ueventd
+
+on init
+    export PATH /sbin:/system/sbin:/system/bin:/system/xbin
+    export ANDROID_ROOT /system
+    export ANDROID_DATA /data
+
+    symlink /system/etc /etc
+
+    setprop service.adb.tcp.port 5555
+
+# for eth0
+service net_eth0-start /system/bin/sh /system/etc/init.net.eth0.sh
+    class core
+    disabled
+    oneshot
+
+on device-added-/dev/eth0
+    start net_eth0-start
+
+on boot
+    ifup lo
+    hostname localhost
+    domainname localdomain
+    class_start main
+
+service ueventd /sbin/ueventd
+    critical
+
+service console /system/bin/sh
+    console
+    disabled
+
+service logcat /system/bin/logcat
+    class main
+    console
+
+# adbd is controlled via property triggers in init.<platform>.usb.rc
+service adbd /sbin/adbd
+    class core
+    disabled
+
+on property:init.svc.iagod=stopped
+    start console
+
+service debuggerd /system/bin/debuggerd
+    class main
+
