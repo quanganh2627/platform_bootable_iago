@@ -29,6 +29,8 @@
 #include <dirent.h>
 #include <linux/fs.h>
 
+#include <cutils/properties.h>
+
 #include <iago.h>
 #include <iago_util.h>
 
@@ -266,7 +268,6 @@ static bool mkpart_cb(char *entry, int index _unused, void *context)
 {
 	struct mkpart_ctx *mc = context;
 	char *flags;
-	const char *device_pat;
 
 	int64_t part_mb = xatoll(hashmapGetPrintf(ictx.opts, NULL,
 				"partition.%s:len", entry));
@@ -282,7 +283,7 @@ static bool mkpart_cb(char *entry, int index _unused, void *context)
 	if (strlen(entry) > 27)
 		die("Partition '%s' name too long!", entry);
 
-	if (execute_command(PARTED " %s name %d %llX%s",
+	if (execute_command(PARTED " %s name %d %016llX%s",
 			mc->device, mc->ptn_index, install_id, entry)) {
 		die("Parted failure!\n");
 	}
@@ -291,13 +292,8 @@ static bool mkpart_cb(char *entry, int index _unused, void *context)
 	string_list_iterate(flags, flags_cb, mc);
 	xhashmapPut(ictx.opts, xasprintf("partition.%s:index", entry),
 			xasprintf("%d", mc->ptn_index));
-	if (isdigit(mc->device[strlen(mc->device) - 1])) {
-		device_pat = "%sp%d";
-	} else {
-		device_pat = "%s%d";
-	}
 	xhashmapPut(ictx.opts, xasprintf("partition.%s:device", entry),
-			xasprintf(device_pat, mc->device, mc->ptn_index));
+			xasprintf("/dev/block/by-name/%s", entry));
 	xhashmapPut(ictx.opts, xasprintf("partition.%s:index", entry),
 			xasprintf("%d", mc->ptn_index));
 	return true;
@@ -329,10 +325,13 @@ static void partitioner_execute(void)
 	struct mkpart_ctx mc;
 	uint64_t lba_size;
 	int fd;
+	char *install_id_str;
 
 	fd = xopen("/dev/urandom", O_RDONLY);
 	xread(fd, &install_id, sizeof(install_id));
 	xclose(fd);
+	install_id_str = xasprintf("%016llX", install_id);
+	property_set("ro.boot.install_id", install_id_str);
 
 	device = (char *)hashmapGetPrintf(ictx.opts, NULL,
 				BASE_INSTALL_DEV);
@@ -377,7 +376,7 @@ static void partitioner_execute(void)
 
 	/* Add kernel command line items */
 	xhashmapPut(ictx.cmdline, xstrdup("androidboot.install_id"),
-			xasprintf("%016llX", install_id));
+			install_id_str);
 
 	pr_debug("partitioner/execute complete");
 }
