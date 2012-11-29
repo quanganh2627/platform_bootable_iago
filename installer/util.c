@@ -619,3 +619,19 @@ void xclose(int fd)
 		die_errno("close");
 }
 
+int make_ext4fs_nowipe(const char *filename, int64_t len,
+                char *mountpoint, struct selabel_handle *sehnd)
+{
+	int fd;
+	int status;
+
+	reset_ext4fs_info();
+	info.len = len;
+
+	fd = xopen(filename, O_WRONLY);
+	status = make_ext4fs_internal(fd, NULL, mountpoint, NULL, 0, 0, 0, 0, 0, sehnd);
+	xclose(fd);
+
+	return status;
+}
+

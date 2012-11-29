@@ -82,5 +82,7 @@ int64_t read_sysfs_int(const char *fmt, ...)
 
 void string_list_append(char **list, char *entry);
 uint64_t get_volume_size(const char *device);
+int make_ext4fs_nowipe(const char *filename, int64_t len,
+                char *mountpoint, struct selabel_handle *sehnd);
 
 #endif

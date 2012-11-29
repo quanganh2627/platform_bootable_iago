@@ -21,8 +21,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <make_ext4fs.h>
-
 #include <iago.h>
 #include <iago_util.h>
 #include "iago_private.h"
@@ -48,7 +46,7 @@ static bool execute_cb(char *entry, int index _unused, void *context _unused)
 			footer = xatol(hashmapGetPrintf(ictx.opts, "0",
 						"%s:footer", prefix));
 			pr_debug("make_ext4fs(%s, %ld, %s)", device, 0 - footer, entry);
-			if (make_ext4fs(device, 0 - footer, entry, sehandle)) {
+			if (make_ext4fs_nowipe(device, 0 - footer, entry, sehandle)) {
 			        pr_error("make_ext4fs failed\n");
 				die();
 			}
