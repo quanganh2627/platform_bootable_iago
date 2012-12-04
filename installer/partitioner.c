@@ -79,7 +79,6 @@ static void sync_ptable(const char *device)
 	int fd;
 	pr_debug("synchonizing partition table for %s", device);
 	sync();
-	sleep(1); /* don't know why BLKRRPART is racy, but it is */
 	fd = xopen(device, O_RDWR);
 	if (ioctl(fd, BLKRRPART, NULL))
 		die_errno("BLKRRPART");
