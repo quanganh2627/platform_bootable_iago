@@ -554,6 +554,20 @@ int64_t read_sysfs_int(const char *fmt, ...)
 	return val;
 }
 
+void ui_printf(const char *fmt, ...)
+{
+	va_list ap;
+	char buf[256];
+
+	fputs("iago: ", stdout);
+	va_start(ap, fmt);
+	vsnprintf(buf, 256, fmt, ap);
+	va_end(ap);
+
+	fputs(buf, stdout);
+	if (buf[strlen(buf) - 1] != '\n')
+		fputs("\n", stdout);
+}
 
 off_t xlseek(int fd, off_t offset, int whence)
 {

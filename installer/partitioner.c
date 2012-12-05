@@ -16,7 +16,6 @@
 
 
 #define _BSD_SOURCE
-#define LOG_TAG "iago partitioner"
 
 #include <ctype.h>
 #include <endian.h>

@@ -15,8 +15,6 @@
  */
 
 
-#define LOG_TAG "iago-imagewriter"
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>

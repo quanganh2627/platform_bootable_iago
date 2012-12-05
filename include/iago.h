@@ -20,6 +20,8 @@
 struct selabel_handle;
 #endif
 
+#include "iago_util.h"
+
 extern struct selabel_handle *sehandle;
 
 struct iago_context {
@@ -63,11 +65,17 @@ struct iago_plugin {
 /* Global installation context that plugins can use and modify */
 extern struct iago_context ictx;
 
-#define pr_error ALOGE
+#define pr_error(x...) {{ \
+    ui_printf("ERROR " x); \
+    ALOGE(x); \
+}}
 #define pr_verbose ALOGV
-#define pr_info ALOGI
+#define pr_info(x...) {{ \
+    ui_printf(x); \
+    ALOGI(x); \
+}}
 #define pr_debug ALOGD
-#define pr_perror(x) ALOGE("%s: %s\n", x, strerror(errno))
+#define pr_perror(x) pr_error("%s: %s\n", x, strerror(errno))
 
 void add_iago_plugin(struct iago_plugin *p);
 

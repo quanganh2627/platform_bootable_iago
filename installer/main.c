@@ -22,8 +22,6 @@
 
 #include <cutils/properties.h>
 
-#define LOG_TAG "iago-main"
-
 #include <iago.h>
 #include <iago_util.h>
 

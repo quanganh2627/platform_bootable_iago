@@ -36,10 +36,6 @@ service console /system/bin/sh
     console
     disabled
 
-service logcat /system/bin/logcat
-    class main
-    console
-
 # adbd is controlled via property triggers in init.<platform>.usb.rc
 service adbd /sbin/adbd
     class core

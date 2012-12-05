@@ -85,4 +85,6 @@ uint64_t get_volume_size(const char *device);
 int make_ext4fs_nowipe(const char *filename, int64_t len,
                 char *mountpoint, struct selabel_handle *sehnd);
 
+void ui_printf(const char *fmt, ...) __attribute__((format(printf,1,2)));
+
 #endif

@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "iago-syslinux"
-
 #include <sys/types.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -30,7 +28,6 @@
 #include <dirent.h>
 
 #include <cutils/config_utils.h>
-#include <cutils/log.h>
 #include <cutils/misc.h>
 
 #include <iago.h>
