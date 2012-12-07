@@ -20,8 +20,10 @@
 
 void droidboot_cli(void)
 {
-	// install droidboot? if so, add 'droidboot' to base:partitions
 	char *plist;
+
+	if (!ui_ask("Install Fastboot?", true))
+		return;
 
 	plist = hashmapGetPrintf(ictx.opts, NULL, BASE_PTN_LIST);
 	string_list_append(&plist, "fastboot");

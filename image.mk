@@ -10,6 +10,7 @@ iago_images_root := $(iago_base)/images
 iago_images_sfs := $(iago_base)/images.sfs
 iago_iso_image := $(PRODUCT_OUT)/liveimg.iso
 iago_ini := $(iago_base)/iago.ini
+iago_default_ini := $(iago_base)/iago-default.ini
 
 define create-sfs
 	$(hide) PATH=/sbin:/usr/sbin:$(PATH) mksquashfs $(1) $(2) -no-recovery -noappend
@@ -45,13 +46,25 @@ include $(foreach dir,$(TARGET_IAGO_PLUGINS),$(dir)/image.mk)
 # the base Iago ini, and any board-specific ini file.
 $(iago_ini): \
 		bootable/iago/installer/iago.ini \
-		$(foreach plugin,$(TARGET_IAGO_PLUGINS),$(plugin)/iago.ini) \
+		$(foreach plugin,$(TARGET_IAGO_PLUGINS),$(wildcard $(plugin)/iago.ini)) \
 		$(TARGET_IAGO_INI) \
 
 	$(hide) mkdir -p $(dir $@)
 	$(hide) cat $^ > $@
 
 IAGO_IMAGES_DEPS += $(iago_ini)
+
+# Build the iago-default.ini, which is options for non-interactive mode
+$(iago_default_ini): \
+		bootable/iago/installer/iago-default.ini \
+		$(foreach plugin,$(TARGET_IAGO_PLUGINS),$(wildcard $(plugin)/iago-default.ini)) \
+		$(TARGET_IAGO_DEFAULT_INI) \
+
+	$(hide) mkdir -p $(dir $@)
+	$(hide) cat $^ > $@
+
+IAGO_IMAGES_DEPS += $(iago_default_ini)
+
 
 iago_isolinux_files := \
 	$(SYSLINUX_BASE)/isolinux.bin \

@@ -78,8 +78,10 @@ static void do_copy_syslinux_files()
 
 void syslinux_cli(void)
 {
-	// ask: do we want to install a bootloader?
 	char *plist;
+	if (!ui_ask("Install SYSLINUX bootloader?", true))
+		return;
+
 	plist = hashmapGetPrintf(ictx.opts, NULL, BASE_PTN_LIST);
 	string_list_append(&plist, "bootloader");
 	xhashmapPut(ictx.opts, xstrdup(BASE_PTN_LIST), plist);

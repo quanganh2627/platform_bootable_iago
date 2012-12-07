@@ -18,6 +18,7 @@
  * the real Init process */
 
 #include <stdio.h>
+#include <stdarg.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -31,8 +32,41 @@
 #define INSTALL_MOUNT   "/installmedia"
 #define TMP_NODE        "/dev/__iago_blkdev"
 
-#define dbg(fmt, ...)       KLOG_ERROR("iago", "%s(): " fmt, __func__, ##__VA_ARGS__)
+#define dbg(fmt, ...)       KLOG_INFO("iago", "%s(): " fmt, __func__, ##__VA_ARGS__)
 #define dbg_perror(x)       dbg("%s: %s\n", x, strerror(errno))
+
+int put_string(int fd, const char *fmt, ...)
+{
+    char *buf, *buf_ptr;
+    va_list ap;
+    ssize_t to_write;
+
+    va_start(ap, fmt);
+    if (vasprintf(&buf, fmt, ap) < 0) {
+        dbg_perror("vasprintf");
+        return -1;
+    }
+
+    va_end(ap);
+
+    buf_ptr = buf;
+    to_write = strlen(buf);
+    while (to_write) {
+        ssize_t written = write(fd, buf_ptr, to_write);
+        if (written < 0) {
+            if (errno == EINTR)
+                continue;
+            dbg_perror("write");
+            free(buf);
+            return -1;
+        }
+        to_write -= written;
+        buf_ptr += written;
+    }
+    free(buf);
+    return 0;
+}
+
 
 int is_iso9660(const char *path)
 {
@@ -134,6 +168,8 @@ int mount_cdrom(void)
     DIR *dir = NULL;
     DIR *dir2 = NULL;
     char path[PATH_MAX];
+    char *name = NULL;
+    int fd;
 
     dir = opendir("/sys/block");
     if (!dir) {
@@ -143,18 +179,18 @@ int mount_cdrom(void)
     while (1) {
         struct dirent *dp = readdir(dir);
         if (!dp)
-            break;
-        if (!strncmp(dp->d_name, ".", 1) ||
-                !strncmp(dp->d_name, "ram", 3) ||
-                !strncmp(dp->d_name, "loop", 4)) {
+            goto out;
+        name = dp->d_name;
+        if (!strncmp(name, ".", 1) ||
+                !strncmp(name, "ram", 3) ||
+                !strncmp(name, "loop", 4)) {
             continue;
         }
 
-        snprintf(path, sizeof(path), "/sys/block/%s/", dp->d_name);
-        if (is_install_media(path)) {
-            ret = 0;
-            goto out;
-        }
+        snprintf(path, sizeof(path), "/sys/block/%s/", name);
+        if (is_install_media(path))
+            goto success;
+
         if ( (dir2 = opendir(path)) == NULL) {
             dbg_perror("opendir");
             goto out;
@@ -163,18 +199,26 @@ int mount_cdrom(void)
             struct dirent *dp2 = readdir(dir2);
             if (!dp2)
                 break;
-            if (strncmp(dp2->d_name, dp->d_name, strlen(dp->d_name)))
+            if (strncmp(dp2->d_name, name, strlen(name)))
                 continue;
             snprintf(path, sizeof(path), "/sys/block/%s/%s/",
-                    dp->d_name, dp2->d_name);
-            if (is_install_media(path)) {
-                ret = 0;
-                goto out;
-            }
+                    name, dp2->d_name);
+            if (is_install_media(path))
+                goto success;
+
         }
         closedir(dir2);
         dir2 = NULL;
     }
+
+success:
+    fd = open("/default.prop", O_WRONLY | O_APPEND);
+    if (fd < 0) {
+        dbg_perror("open");
+        goto out;
+    }
+    ret = put_string(fd, "\nro.iago.media=%s\n", name);
+    close(fd);
 
 out:
     if (dir)

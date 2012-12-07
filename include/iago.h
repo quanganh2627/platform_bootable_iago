@@ -62,6 +62,17 @@ struct iago_plugin {
 	void (*execute)(void);
 };
 
+struct ui_option {
+	/* Embedded list strict */
+	struct listnode list;
+
+	/* String option to be selected; returned by selection function */
+	char *option;
+
+	/* Description to show to the user */
+	char *description;
+};
+
 /* Global installation context that plugins can use and modify */
 extern struct iago_context ictx;
 
@@ -79,6 +90,8 @@ extern struct iago_context ictx;
 
 void add_iago_plugin(struct iago_plugin *p);
 
+#define COMBINED_INI		"/data/iago.ini"
+
 /* List of partitions to install - each must have a partitions-<name>
  * block in the combined ini */
 #define BASE_PTN_LIST		"base:partitions"
@@ -86,6 +99,11 @@ void add_iago_plugin(struct iago_plugin *p);
 /* List of partitions which are boot images, which will be put in
  * the bootloader configuration. First item is the default */
 #define BASE_BOOT_LIST		"base:bootimages"
+
+/* List of all available disks to install Android on. Each will have
+ * a corresponding disk.<name> block with keys sectors, lba_size, size,
+ * and model */
+#define BASE_DISK_LIST		"base:disks"
 
 /* Path to device node for installation disk. The bootloader and boot
  * images need to reside here */

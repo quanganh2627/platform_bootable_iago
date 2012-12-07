@@ -110,6 +110,7 @@ static void execution_phase(void)
 int main(int argc _unused, char **argv _unused)
 {
 	char prop[PROPERTY_VALUE_MAX];
+	char *default_ini = NULL;
 
 	pr_info("iago daemon " IAGO_VERSION " starting\n");
 	umask(066);
@@ -139,21 +140,20 @@ int main(int argc _unused, char **argv _unused)
 	 * install.prop, fstab, and recovery.fstab */
 	add_iago_plugin(finalizer_init());
 
-	/* Build-time configuration */
-	load_ini_file("/installmedia/images/iago.ini");
-
+	copy_file("/installmedia/images/iago.ini", COMBINED_INI);
+	if (property_get("ro.boot.iago.ini", prop, "") > 0) {
+		default_ini = xstrdup(prop);
+		append_file(default_ini, COMBINED_INI);
+	}
+	load_ini_file(COMBINED_INI);
 	preparation_phase();
-
-	hashmap_dump(ictx.opts);
 
 	if (property_get("ro.boot.iago.cli", prop, "") > 0) {
 		/* Use the built-in command-line text interactive installer
 		 * if specified */
 		cli_phase();
-	} else if (property_get("ro.boot.iago.ini", prop, "") > 0) {
-		/* Use defaults in this file, merging with existing props */
-		load_ini_file(prop);
-	} else {
+		ui_pause();
+	} else if (!default_ini) {
 		/* TODO this isn't fully implemented */
 		//write_opts(ictx.opts, "/data/iago-prepare.ini");
 		hashmap_destroy(ictx.opts);
@@ -170,6 +170,7 @@ int main(int argc _unused, char **argv _unused)
 		else
 			die("Couldn't get configuration from interactive installer!\n");
 	}
+	hashmap_dump(ictx.opts);
 
 	execution_phase();
 

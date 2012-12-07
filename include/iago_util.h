@@ -19,6 +19,10 @@
 #define IAGO_UTIL_H
 
 #include <stdlib.h>
+#include <ctype.h>
+#include <cutils/hashmap.h>
+#include <iniparser.h>
+#include <cutils/list.h>
 
 #define _unused __attribute__((unused))
 #define _noreturn __attribute__((noreturn))
@@ -70,6 +74,8 @@ void hashmap_dump(Hashmap *h);
 
 void copy_file(const char *src, const char *dest);
 void dd(const char *src, const char *dest);
+void append_file(const char *src, const char *dest);
+
 void write_opts(Hashmap *h, const char *filename);
 void put_string(int fd, const char *fmt, ...)
 		__attribute__((format(printf,2,3)));
@@ -86,5 +92,9 @@ int make_ext4fs_nowipe(const char *filename, int64_t len,
                 char *mountpoint, struct selabel_handle *sehnd);
 
 void ui_printf(const char *fmt, ...) __attribute__((format(printf,1,2)));
+char *ui_option_get(const char *question, struct listnode *list);
+bool ui_ask(const char *question, bool dfl);
+void option_list_free(struct listnode *list);
+void ui_pause(void);
 
 #endif

@@ -195,6 +195,9 @@ static void partitioner_prepare(void)
 {
 	/* Scan all the existing available disks and populate opts with their info */
 	DIR *dir = NULL;
+	char *disks = xstrdup("");
+	char media[PROPERTY_VALUE_MAX];
+	property_get("ro.iago.media", media, "");
 
 	dir = opendir("/sys/block");
 	if (!dir)
@@ -203,13 +206,15 @@ static void partitioner_prepare(void)
 	while (1) {
 		struct dirent *dp = readdir(dir);
 		uint64_t sectors, lba_size;
+
 		if (!dp)
 			break;
 		if (!strncmp(dp->d_name, ".", 1) ||
 				!strncmp(dp->d_name, "ram", 3) ||
 				!strncmp(dp->d_name, "loop", 4))
 			continue;
-
+		if (!strcmp(dp->d_name, media))
+			continue;
 		sectors = read_sysfs_int("/sys/block/%s/size", dp->d_name);
 		lba_size = read_sysfs_int("/sys/block/%s/queue/logical_block_size",
 				dp->d_name);
@@ -222,15 +227,37 @@ static void partitioner_prepare(void)
 				xasprintf("%llu", (lba_size * sectors) >> 20));
 		xhashmapPut(ictx.opts, xasprintf("disk.%s:model", dp->d_name),
 				read_sysfs("/sys/block/%s/device/model", dp->d_name));
+		string_list_append(&disks, dp->d_name);
 	}
 	closedir(dir);
+	xhashmapPut(ictx.opts, xasprintf(BASE_DISK_LIST), disks);
 }
 
 
+static bool disk_list_cb(char *disk, int _unused index, void *context)
+{
+	struct listnode *disk_list = context;
+	struct ui_option *opt = xmalloc(sizeof(*opt));
+	opt->option = xstrdup(disk);
+	opt->description = xasprintf("%9s %9lldM '%s'", disk,
+		xatoll(hashmapGetPrintf(ictx.opts, NULL, "disk.%s:size", disk)),
+		hashmapGetPrintf(ictx.opts, NULL, "disk.%s:model", disk));
+	list_add_tail(disk_list, &opt->list);
+	return true;
+}
+
 static void partitioner_cli(void)
 {
-	// set base:install_device
-	xhashmapPut(ictx.opts, xstrdup(BASE_INSTALL_DEV), xstrdup("/dev/block/sda"));
+	list_declare(disk_list);
+
+	string_list_iterate(hashmapGetPrintf(ictx.opts, NULL, BASE_DISK_LIST),
+			disk_list_cb, &disk_list);
+
+	xhashmapPut(ictx.opts, xstrdup(BASE_INSTALL_DEV),
+				xasprintf("/dev/block/%s",
+				ui_option_get("Choose disk to install Android:",
+					&disk_list)));
+	option_list_free(&disk_list);
 }
 
 struct mkpart_ctx {

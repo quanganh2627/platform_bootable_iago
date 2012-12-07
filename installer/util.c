@@ -132,15 +132,23 @@ ssize_t xwrite(int fd, const void *buf, size_t count)
 
 
 #define CHUNK	1024 * 1024
-static void __dd(const char *src, const char *dest, bool copy_ok)
+static void __dd(const char *src, const char *dest, bool copy_ok, bool append)
 {
 	char buf[CHUNK];
 	ssize_t to_write;
 	int ifd, ofd;
 	size_t total_written = 0;
+	int flags;
 
 	ifd = xopen(src, O_RDONLY);
-	ofd = xopen(dest, copy_ok ? (O_WRONLY | O_CREAT) : O_WRONLY);
+
+	flags = O_WRONLY;
+	if (copy_ok)
+		flags |= O_CREAT;
+	if (append)
+		flags |= O_APPEND;
+
+	ofd = xopen(dest, flags);
 
 	while (1) {
 		to_write = robust_read(ifd, buf, CHUNK, true);
@@ -158,15 +166,19 @@ static void __dd(const char *src, const char *dest, bool copy_ok)
 
 void dd(const char *src, const char *dest)
 {
-	__dd(src, dest, false);
+	__dd(src, dest, false, false);
 }
 
 
 void copy_file(const char *src, const char *dest)
 {
-	__dd(src, dest, true);
+	__dd(src, dest, true, false);
 }
 
+void append_file(const char *src, const char *dest)
+{
+	__dd(src, dest, false, true);
+}
 
 void mount_partition_device(const char *device, const char *type, char *mountpoint)
 {
@@ -567,6 +579,94 @@ void ui_printf(const char *fmt, ...)
 	fputs(buf, stdout);
 	if (buf[strlen(buf) - 1] != '\n')
 		fputs("\n", stdout);
+}
+
+bool ui_ask(const char *question, bool dfl)
+{
+	char buf[32];
+
+again:
+	fprintf(stdout, "%s (%s)? ", question, dfl ? "Y/n" : "y/N");
+	fgets(buf, sizeof(buf), stdin);
+	switch (toupper(buf[0])) {
+	case 'Y':
+		return true;
+	case 'N':
+		return false;
+	case '\n':
+		return dfl;
+	default:
+		fprintf(stdout, "What?\n");
+		goto again;
+	}
+}
+
+void ui_pause(void)
+{
+	char buf[32];
+	fprintf(stdout, "Press enter to continue.");
+	fgets(buf, sizeof(buf), stdin);
+}
+
+char *ui_option_get(const char *question, struct listnode *list)
+{
+	struct listnode *node;
+	char *ret;
+	char buf[32];
+	unsigned i = 0;
+	unsigned select = 1;
+
+
+	fprintf(stdout, "%s\n", question);
+	if (list->next->next == list) {
+		/* Only one entry; don't bother asking */
+		struct ui_option *opt = node_to_item(list->next, struct ui_option,
+				list);
+		fprintf(stdout, "Automatically selected %s (only option)\n",
+				opt->description);
+		return opt->option;
+	}
+	list_for_each(node, list) {
+		struct ui_option *opt = node_to_item(node, struct ui_option, list);
+		fprintf(stdout, "  %d) %s\n", ++i, opt->description);
+	}
+	if (!i)
+		die("no items to select");
+again:
+	fprintf(stdout, "Enter selection (default=1): ");
+	fgets(buf, sizeof(buf), stdin);
+	if (buf[0] != '\n')
+		select = atoi(buf);
+
+	if (select >= i) {
+		fprintf(stdout, "Invalid selection\n");
+		goto again;
+	}
+	node = list->next;
+	while(1) {
+		if (!--select) {
+			struct ui_option *opt = node_to_item(node,
+					struct ui_option, list);
+			ret = opt->option;
+			break;
+		}
+		node = node->next;
+	}
+
+	return ret;
+}
+
+void option_list_free(struct listnode *list)
+{
+	struct listnode *node, *next;
+
+	list_for_each_safe(node, next, list) {
+		struct ui_option *opt = node_to_item(node,
+				struct ui_option, list);
+		free(opt->description);
+		free(opt->option);
+		free(opt);
+	}
 }
 
 off_t xlseek(int fd, off_t offset, int whence)
