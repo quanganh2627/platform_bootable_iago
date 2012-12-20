@@ -34,22 +34,9 @@
 #include <iago_util.h>
 
 #define BOOTLOADER_PATH			"/mnt/bootloader"
-#define SYSLINUX_BIN			"/installmedia/images/android_syslinux"
 #define SYSLINUX_FILES_PATH		"/installmedia/images/syslinux"
-#define SYSLINUX_CFG_TEM_FN		"/installmedia/images/syslinux.template.cfg"
-#define SYSLINUX_MBR			"/installmedia/images/gptmbr.bin"
 #define SYSLINUX_CFG_FN			BOOTLOADER_PATH "/syslinux.cfg"
-
-
-static void do_install_syslinux(const char *device)
-{
-	int rv = -1;
-
-	/* executing syslinux to installer bootloader */
-	if ((rv = execute_command(SYSLINUX_BIN " --install %s", device)))
-		die("Error while running syslinux: %d", rv);
-}
-
+#define EFI_ENTRY			"Android-IA"
 
 static void do_copy_syslinux_files()
 {
@@ -79,11 +66,12 @@ static void do_copy_syslinux_files()
 void syslinux_cli(void)
 {
 	char *plist;
+
 	if (!ui_ask("Install SYSLINUX bootloader?", true))
 		return;
 
 	plist = hashmapGetPrintf(ictx.opts, NULL, BASE_PTN_LIST);
-	string_list_append(&plist, "bootloader");
+	string_list_prepend(&plist, "bootloader");
 	xhashmapPut(ictx.opts, xstrdup(BASE_PTN_LIST), plist);
 	xhashmapPut(ictx.opts, xstrdup(BASE_BOOTLOADER),
 			xstrdup("syslinux"));
@@ -110,17 +98,9 @@ static bool bootimage_cb(char *entry, int index _unused, void *context)
 	description = hashmapGetPrintf(ictx.opts, NULL,
 			"%s:description", prefix);
 	put_string(fd, "label %s\n", entry);
-	put_string(fd, "    menu label ^%s\n", description);
-	put_string(fd, "    com32 android.c32\n");
-#if SYSLINUX_USE_GUID
-	put_string(fd, "    append current GUID=%s",
-			hashmapGetPrintf(ictx.opts, NULL,
-			"%s:guid", prefix));
-#else
-	disk = hashmapGetPrintf(ictx.opts, NULL,
-			"%s:index", prefix);
-	put_string(fd, "    append current %s", disk);
-#endif
+	put_string(fd, "    kernel /kernel\n");
+	put_string(fd, "    initrd /ramdisk.img\n");
+	put_string(fd, "    append " CMDLINE " ");
 
 	hashmapForEach(ictx.cmdline, cmdline_cb, (void*)fd);
 
@@ -141,23 +121,14 @@ void syslinux_execute(void)
 {
 	char *device;
 	char *bootimages;
-	int fd;
+	int fd, ret;
 
 	if (strcmp(hashmapGetPrintf(ictx.opts, "none", BASE_BOOTLOADER),
 				"syslinux"))
 		return;
 
-	pr_info("Writing MBR");
-	dd(SYSLINUX_MBR, hashmapGetPrintf(ictx.opts, NULL,
-				BASE_INSTALL_DEV));
-
-	/* SYSLINUX complains if this isn't done */
-	chmod("/tmp", 01777);
-
 	bootimages = hashmapGetPrintf(ictx.opts, NULL, BASE_BOOT_LIST);
 	device = hashmapGetPrintf(ictx.opts, NULL, "partition.bootloader:device");
-	pr_info("Installing ldlinux.sys");
-	do_install_syslinux(device);
 
 	/* In case we die() before we are finished */
 	signal(SIGABRT, sighandler);
@@ -167,20 +138,18 @@ void syslinux_execute(void)
 
 	pr_info("Constructing syslinux.cfg");
 	/* Put the initial template stuff in */
-	copy_file(SYSLINUX_CFG_TEM_FN, SYSLINUX_CFG_FN);
-	fd = xopen(SYSLINUX_CFG_FN, O_WRONLY | O_APPEND);
-
-#if SYSLINUX_USE_GUID
-	put_string(fd, "menu androidcommand GUID=%s\n", device_to_uuid(
-				hashmapGetPrintf(ictx.opts, NULL,
-					         "partition.misc:device")));
-#else
-	put_string(fd, "menu androidcommand %s\n",
-		hashmapGetPrintf(ictx.opts, NULL, "partition.misc:index"));
-#endif
+	fd = xopen(SYSLINUX_CFG_FN, O_WRONLY | O_CREAT);
+	put_string(fd, "default boot\n\n");
 	string_list_iterate(bootimages, bootimage_cb, (void*)fd);
 
 	xclose(fd);
+	ret = execute_command("efibootmgr -c -d %s -l \\\\syslinux.efi -v -p %s -D %s -L %s",
+			hashmapGetPrintf(ictx.opts, NULL, BASE_INSTALL_DEV),
+			hashmapGetPrintf(ictx.opts, NULL, "partition.bootloader:index"),
+			EFI_ENTRY, EFI_ENTRY);
+	if (ret) {
+		die("Some problem with efibootmgr");
+	}
 	umount(BOOTLOADER_PATH);
 	rmdir(BOOTLOADER_PATH);
 	signal(SIGABRT, SIG_DFL);

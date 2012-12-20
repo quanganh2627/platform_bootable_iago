@@ -35,6 +35,8 @@
 #define dbg(fmt, ...)       KLOG_INFO("iago", "%s(): " fmt, __func__, ##__VA_ARGS__)
 #define dbg_perror(x)       dbg("%s: %s\n", x, strerror(errno))
 
+static int g_check_vfat;
+
 int put_string(int fd, const char *fmt, ...)
 {
     char *buf, *buf_ptr;
@@ -68,10 +70,24 @@ int put_string(int fd, const char *fmt, ...)
 }
 
 
-int is_iso9660(const char *path)
+int seek_and_read(int fd, off_t offset, void *buf, size_t count)
+{
+    if (lseek(fd, offset, SEEK_SET) < 0) {
+        dbg_perror("lseek");
+        return -1;
+    }
+    if (read(fd, buf, count) != (ssize_t)count) {
+        dbg_perror("read");
+        return -1;
+    }
+    return 0;
+}
+
+
+int is_expected_fs(const char *path)
 {
     int fd;
-    char buf[5];
+    unsigned char buf[16];
     int ret = 0;
 
     fd = open(path, O_RDONLY);
@@ -80,16 +96,39 @@ int is_iso9660(const char *path)
         return 0;
     }
 
-    if (lseek(fd, 16 * 2048 + 1, SEEK_SET) < 0) {
-        dbg_perror("lseek");
-        goto out;
-    }
-    if (read(fd, buf, 5) != 5) {
-        dbg_perror("read");
-        goto out;
-    }
-    if (!memcmp(buf, "CD001", 5))
+    if (g_check_vfat) {
+        unsigned char buf[2];
+        /* No consistent 'magic' in FAT32, but some fields
+         * have fixed values (always little-endian) in all but
+         * very obscure cases */
+
+        /* Check signature */
+        if (seek_and_read(fd, 0x1FE, buf, 2))
+            goto out;
+        if (buf[0] != 0x55 || buf[1] != 0xAA)
+            goto out;
+
+        /* Check number of FATs, should be 2 */
+        if (seek_and_read(fd, 0x10, buf, 1))
+            goto out;
+        if (buf[0] != 2)
+            goto out;
+
+        /* Check bytes per sector, should be 512 */
+        if (seek_and_read(fd, 0x0B, buf, 2))
+            goto out;
+        if (buf[0] != 0x00 || buf[1] != 0x02)
+            goto out;
+
         ret = 1;
+    } else {
+        /* Check for ISO9660 magic value */
+        if (seek_and_read(fd, 16 * 2048 + 1, buf, 5))
+            goto out;
+
+        if (!memcmp(buf, "CD001", 5))
+            ret = 1;
+    }
 out:
     close(fd);
     return ret;
@@ -134,14 +173,15 @@ int is_install_media(char *name)
         return 0;
     }
 
-    if (!is_iso9660(TMP_NODE)) {
-        dbg("Not an iso9660 volume\n");
+    if (!is_expected_fs(TMP_NODE)) {
+        dbg("Not the right fs type\n");
         goto out_unlink;
     }
 
-    dbg("Mounting device %d:%d as iso9660\n", major(dev), minor(dev));
+    dbg("Mounting device %d:%d\n", major(dev), minor(dev));
     /* Try to mount an iso9660 fs */
-    if (mount(TMP_NODE, INSTALL_MOUNT, "iso9660", MS_RDONLY, "")) {
+    if (mount(TMP_NODE, INSTALL_MOUNT, g_check_vfat ? "vfat" : "iso9660",
+                    MS_RDONLY, "")) {
         dbg_perror("mount");
         goto out_unlink;
     }
@@ -162,7 +202,7 @@ out_unlink:
 }
 
 
-int mount_cdrom(void)
+int mount_device(void)
 {
     int ret = -1;
     DIR *dir = NULL;
@@ -232,6 +272,10 @@ out:
 int main(void)
 {
     int count = 15;
+    char *val;
+
+    val = getenv("PREINIT_CHECK_FAT");
+    g_check_vfat = !!val;
 
     mount("tmpfs", "/dev", "tmpfs", MS_NOSUID, "mode=0755");
     mount("sysfs", "/sys", "sysfs", 0, NULL);
@@ -240,7 +284,7 @@ int main(void)
     klog_set_level(8);
 
     while (1) {
-        if (!mount_cdrom())
+        if (!mount_device())
             break;
 
         if (count--) {

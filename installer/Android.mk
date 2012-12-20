@@ -10,7 +10,7 @@ LOCAL_SRC_FILES := main.c \
 
 
 LOCAL_CFLAGS := -DDEVICE_NAME=\"$(TARGET_BOOTLOADER_BOARD_NAME)\" \
-	-W -Wall -Werror -O0
+	-W -Wall -Werror
 
 plugin_names := $(foreach plugin,$(TARGET_IAGO_PLUGINS),$(notdir $(plugin)))
 plugin_lib_names := $(foreach plugin,$(TARGET_IAGO_PLUGINS),libiago_$(notdir $(plugin)))

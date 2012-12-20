@@ -6,7 +6,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := libiago_syslinux
 LOCAL_MODULE_TAGS := optional
 LOCAL_SRC_FILES := iago-syslinux.c
-LOCAL_CFLAGS := -Wall -Werror
+LOCAL_CFLAGS := -Wall -DCMDLINE="\"$(BOARD_KERNEL_CMDLINE)\""
 LOCAL_C_INCLUDES := bootable/iago/include  external/iniparser/src
 
 include $(BUILD_STATIC_LIBRARY)

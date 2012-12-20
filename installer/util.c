@@ -509,6 +509,19 @@ void string_list_append(char **list, char *entry)
 	}
 }
 
+void string_list_prepend(char **list, char *entry)
+{
+	char *newlist;
+
+	if (!(*list) || strlen(*list) == 0) {
+		free(*list);
+		*list = xasprintf("%s", entry);
+	} else {
+		newlist = xasprintf("%s %s", entry, *list);
+		free(*list);
+		*list = newlist;
+	}
+}
 
 ssize_t xread(int fd, void *buf, size_t count)
 {

@@ -85,6 +85,7 @@ char *read_sysfs(const char *fmt, ...)
 		__attribute__((format(printf,1,2)));
 int64_t read_sysfs_int(const char *fmt, ...)
 		__attribute__((format(printf,1,2)));
+void string_list_prepend(char **list, char *entry);
 
 void string_list_append(char **list, char *entry);
 uint64_t get_volume_size(const char *device);
