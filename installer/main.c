@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 
 #include <cutils/properties.h>
+#include <cutils/android_reboot.h>
 
 #include <iago.h>
 #include <iago_util.h>
@@ -111,6 +112,7 @@ int main(int argc _unused, char **argv _unused)
 {
 	char prop[PROPERTY_VALUE_MAX];
 	char *default_ini = NULL;
+	bool cli_mode;
 
 	pr_info("iago daemon " IAGO_VERSION " starting\n");
 	umask(066);
@@ -126,6 +128,7 @@ int main(int argc _unused, char **argv _unused)
 	}
 #endif
 	init_iago_context();
+	cli_mode = (property_get("ro.boot.iago.cli", prop, "") > 0);
 
 	/* Initializes the GPT partition table */
 	add_iago_plugin(partitioner_init());
@@ -148,11 +151,10 @@ int main(int argc _unused, char **argv _unused)
 	load_ini_file(COMBINED_INI);
 	preparation_phase();
 
-	if (property_get("ro.boot.iago.cli", prop, "") > 0) {
+	if (cli_mode) {
 		/* Use the built-in command-line text interactive installer
 		 * if specified */
 		cli_phase();
-		ui_pause();
 	} else if (!default_ini) {
 		/* TODO this isn't fully implemented */
 		//write_opts(ictx.opts, "/data/iago-prepare.ini");
@@ -170,9 +172,17 @@ int main(int argc _unused, char **argv _unused)
 		else
 			die("Couldn't get configuration from interactive installer!\n");
 	}
+
 	hashmap_dump(ictx.opts);
 
+	if (cli_mode)
+		ui_pause();
+
 	execution_phase();
+	if (cli_mode)
+		pr_info("You may now reboot into the installed image.\n");
+	else
+		android_reboot(ANDROID_RB_RESTART, 0, NULL);
 
 	return 0;
 }

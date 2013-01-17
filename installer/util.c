@@ -184,15 +184,20 @@ void mount_partition_device(const char *device, const char *type, char *mountpoi
 {
 	int ret;
 
-	ret = mkdir(mountpoint, 0777);
-	if (ret && errno != EEXIST)
-		die_errno("mkdir");
-
+	xmkdir(mountpoint, 0777);
 	pr_debug("Mounting %s (%s) --> %s\n", device,
 			type, mountpoint);
 	ret = mount(device, mountpoint, type, MS_SYNCHRONOUS, "");
 	if (ret && errno != EBUSY)
 		die_errno("mount");
+}
+
+void xmkdir(const char *path, mode_t mode)
+{
+	int ret;
+	ret = mkdir(path, mode);
+	if (ret && errno != EEXIST)
+		die_errno("mkdir");
 }
 
 
@@ -612,6 +617,23 @@ again:
 		fprintf(stdout, "What?\n");
 		goto again;
 	}
+}
+
+unsigned int ui_get_integer(const char *question, unsigned int dfl)
+{
+	char buf[32];
+	unsigned int result;
+again:
+	errno = 0;
+	fprintf(stdout, "%s (enter=%d): ", question, dfl);
+	fgets(buf, sizeof(buf), stdin);
+	if (buf[0] == '\n')
+		return dfl;
+
+	result = (unsigned int)strtoul(buf, NULL, 0);
+	if (errno)
+		goto again;
+	return result;
 }
 
 void ui_pause(void)

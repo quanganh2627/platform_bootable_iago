@@ -23,6 +23,7 @@
 #include <cutils/hashmap.h>
 #include <iniparser.h>
 #include <cutils/list.h>
+#include <sys/types.h>
 
 #define _unused __attribute__((unused))
 #define _noreturn __attribute__((noreturn))
@@ -55,6 +56,7 @@ void xclose(int fd);
 long int xatol(const char *nptr);
 long long int xatoll(const char *nptr);
 ssize_t xwrite(int fd, const void *buf, size_t count);
+void xmkdir(const char *path, mode_t mode);
 
 /* Volume operations */
 void ext4_filesystem_checks(const char *device, size_t footer);
@@ -97,5 +99,6 @@ char *ui_option_get(const char *question, struct listnode *list);
 bool ui_ask(const char *question, bool dfl);
 void option_list_free(struct listnode *list);
 void ui_pause(void);
+unsigned int ui_get_integer(const char *question, unsigned int dfl);
 
 #endif

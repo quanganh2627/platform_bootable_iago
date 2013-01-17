@@ -67,16 +67,6 @@ $(iago_default_ini): \
 
 IAGO_IMAGES_DEPS += $(iago_default_ini)
 
-iago_syslinux_files := \
-	$(SYSLINUX_BASE)/vesamenu.c32 \
-	$(SYSLINUX_BASE)/libcom32.c32 \
-	$(SYSLINUX_BASE)/libcom32gpl.c32 \
-	$(SYSLINUX_BASE)/libutil_com.c32 \
-	$(SYSLINUX_BASE)/ldlinux.c32 \
-	$(SYSLINUX_BASE)/libmenu.c32 \
-	$(LOCAL_PATH)/splash.png \
-	$(iago_base)/syslinux.cfg \
-
 
 $(iago_images_sfs): \
 		$(IAGO_IMAGES_DEPS) \
@@ -95,10 +85,6 @@ ifeq ($(TARGET_USERIMAGES_SPARSE_EXT_DISABLED),false)
 		)
 endif
 	$(call create-sfs,$(iago_images_root),$@)
-
-$(iago_base)/syslinux.cfg: $(LOCAL_PATH)/syslinux.cfg
-	$(hide) mkdir -p $(iago_base)
-	$(hide) sed "s|CMDLINE|$(BOARD_KERNEL_CMDLINE)|" $^ > $@
 
 $(iago_ramdisk): \
 		$(LOCAL_PATH)/image.mk \
@@ -125,19 +111,31 @@ $(iago_ramdisk): \
 	$(hide) $(MKBOOTFS) $(iago_ramdisk_root) | $(MINIGZIP) > $@
 
 ifeq ($(TARGET_KERNEL_ARCH),i386)
-syslinux_efi_name := bootia32.efi
+gummiboot_efi_name := bootia32.efi
 else
-syslinux_efi_name := bootx64.efi
+gummiboot_efi_name := bootx64.efi
 endif
+
+iago_gummiboot_files := \
+	$(iago_base)/live.conf \
+        $(iago_base)/install.conf \
+	$(iago_base)/interactive.conf \
+
+$(iago_base)/%.conf: $(LOCAL_PATH)/%.conf.in
+	$(hide) mkdir -p $(iago_base)
+	$(hide) sed "s|CMDLINE|$(BOARD_KERNEL_CMDLINE)|" $^ > $@
+
+iago_efi_loader := $(iago_rootfs)/loader
 
 $(iago_fs_img): \
 		$(LOCAL_PATH)/image.mk \
 		$(iago_ramdisk) \
 		$(iago_images_sfs) \
-		$(iago_syslinux_files) \
+		$(iago_gummiboot_files) \
 		$(INSTALLED_KERNEL_TARGET) \
 		$(LOCAL_PATH)/make_vfatfs \
-		$(SYSLINUX_BASE)/syslinux.efi \
+		$(GUMMIBOOT_EFI) \
+		$(LOCAL_PATH)/loader.conf \
 		| $(ACP) \
 
 	$(hide) rm -rf $(iago_rootfs)
@@ -148,8 +146,10 @@ $(iago_fs_img): \
 	$(hide) $(ACP) -f $(iago_images_sfs) $(iago_rootfs)
 	$(hide) mkdir -p $(iago_rootfs)/images
 	$(hide) mkdir -p $(iago_efi_dir)
-	$(hide) $(ACP) $(SYSLINUX_BASE)/syslinux.efi $(iago_efi_dir)/$(syslinux_efi_name)
-	$(hide) $(ACP) -f $(iago_syslinux_files) $(iago_efi_dir)
+	$(hide) mkdir -p $(iago_efi_loader)/entries
+	$(hide) $(ACP) $(GUMMIBOOT_EFI) $(iago_efi_dir)/$(gummiboot_efi_name)
+	$(hide) $(ACP) $(LOCAL_PATH)/loader.conf $(iago_efi_loader)/loader.conf
+	$(hide) $(ACP) -f $(iago_gummiboot_files) $(iago_efi_loader)/entries/
 	$(hide) $(LOCAL_PATH)/make_vfatfs $(iago_rootfs) $@
 
 edit_mbr := $(HOST_OUT_EXECUTABLES)/editdisklbl

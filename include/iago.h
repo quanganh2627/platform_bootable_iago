@@ -76,15 +76,15 @@ struct ui_option {
 /* Global installation context that plugins can use and modify */
 extern struct iago_context ictx;
 
-#define pr_error(x...) {{ \
+#define pr_error(x...) do {\
     ui_printf("ERROR " x); \
     ALOGE(x); \
-}}
+} while(0)
 #define pr_verbose ALOGV
-#define pr_info(x...) {{ \
+#define pr_info(x...) do {\
     ui_printf(x); \
     ALOGI(x); \
-}}
+} while(0)
 #define pr_debug ALOGD
 #define pr_perror(x) pr_error("%s: %s\n", x, strerror(errno))
 

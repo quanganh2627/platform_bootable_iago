@@ -357,7 +357,8 @@ static void partitioner_execute(void)
 	xread(fd, &install_id, sizeof(install_id));
 	xclose(fd);
 	install_id_str = xasprintf("%016llX", install_id);
-	property_set("ro.boot.install_id", install_id_str);
+	if (property_set("ro.boot.install_id", install_id_str))
+		die("Unable to set ro.boot.install_id");
 
 	device = (char *)hashmapGetPrintf(ictx.opts, NULL,
 				BASE_INSTALL_DEV);

@@ -1,0 +1,5 @@
+title	Live Android session
+linux	/kernel
+initrd	/ramdisk.img
+options CMDLINE PREINIT_CHECK_FAT=1
+
