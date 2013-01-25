@@ -57,6 +57,15 @@ void gummiboot_cli(void)
 			xasprintf("%u", timeout));
 }
 
+static void gummiboot_prepare(void)
+{
+	/* bootloader2 partition is used during OTA updates to atomically
+	 * update the ESP. */
+	xhashmapPut(ictx.opts, xstrdup("partition.bootloader2:len"),
+		    xstrdup(hashmapGetPrintf(ictx.opts, NULL, "partition.bootloader:len")));
+}
+
+
 static bool cmdline_cb(void *k, void *v, void *context)
 {
 	int fd = (int)context;
@@ -101,7 +110,7 @@ static void sighandler(int signum)
 	raise(signum);
 }
 
-void gummiboot_execute(void)
+static void gummiboot_execute(void)
 {
 	char *device;
 	char *bootimages;
@@ -147,7 +156,8 @@ void gummiboot_execute(void)
 
 static struct iago_plugin plugin = {
 	.cli_session = gummiboot_cli,
-	.execute = gummiboot_execute
+	.execute = gummiboot_execute,
+	.prepare = gummiboot_prepare
 };
 
 
