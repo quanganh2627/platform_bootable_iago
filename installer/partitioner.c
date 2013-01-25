@@ -71,8 +71,6 @@ struct gpt_entry {
 	uint16_t name[36]; /* UTF-16LE */
 } __attribute__((__packed__));
 
-static struct gpt_header hdr;
-static unsigned char *entries;
 static uint64_t install_id;
 
 static void sync_ptable(const char *device)
@@ -103,14 +101,15 @@ static char *guid_to_string(struct guid *g)
 			g->data4[4], g->data4[5], g->data4[6], g->data4[7]);
 }
 
-static struct gpt_entry *get_entry(unsigned int entry_index)
+static struct gpt_entry *get_entry(unsigned int entry_index,
+		struct gpt_header *hdr, unsigned char *entries)
 {
 	struct gpt_entry *e;
-	if (entry_index >= letoh32(hdr.num_pentries))
+	if (entry_index >= letoh32(hdr->num_pentries))
 		die("invalid GPT entry %d (max %d)", entry_index,
-				letoh32(hdr.num_pentries));
+				letoh32(hdr->num_pentries));
 
-	e = (struct gpt_entry *)(entries + (letoh32(hdr.pentry_size) *
+	e = (struct gpt_entry *)(entries + (letoh32(hdr->pentry_size) *
 				entry_index));
 	return e;
 }
@@ -135,44 +134,47 @@ static void dump_pentry(struct gpt_entry *ent)
 }
 
 
-static void dump_pentries(void)
+static void dump_pentries(struct gpt_header *hdr, unsigned char *entries)
 {
 	uint32_t i;
 	pr_debug("----------- GPT ENTRIES -------------\n");
-	for (i = 0; i < letoh32(hdr.num_pentries); i++) {
-		struct gpt_entry *e = get_entry(i);
+	for (i = 0; i < letoh32(hdr->num_pentries); i++) {
+		struct gpt_entry *e = get_entry(i, hdr, entries);
 		if (e->first_lba)
-			dump_pentry(get_entry(i));
+			dump_pentry(e);
 	}
 	pr_debug("-------------------------------------\n");
 }
 
 
-static void dump_header(void)
+static void dump_header(struct gpt_header *hdr)
 {
-	char *disk_guid = guid_to_string(&(hdr.disk_guid));
+	char *disk_guid = guid_to_string(&(hdr->disk_guid));
 	pr_debug("------------ GPT HEADER -------------\n");
-	pr_debug("             rev: 0x%08X\n", letoh32(hdr.revision));
-	pr_debug("        hdr_size: %u\n", letoh32(hdr.header_size));
-	pr_debug("           crc32: 0x%08X\n", letoh32(hdr.crc32));
-	pr_debug("     current_lba: %llu\n", letoh64(hdr.current_lba));
-	pr_debug("      backup_lba: %llu\n", letoh64(hdr.backup_lba));
-	pr_debug("first_usable_lba: %llu\n", letoh64(hdr.first_usable_lba));
-	pr_debug(" last_usable_lba: %llu\n", letoh64(hdr.last_usable_lba));
+	pr_debug("             rev: 0x%08X\n", letoh32(hdr->revision));
+	pr_debug("        hdr_size: %u\n", letoh32(hdr->header_size));
+	pr_debug("           crc32: 0x%08X\n", letoh32(hdr->crc32));
+	pr_debug("     current_lba: %llu\n", letoh64(hdr->current_lba));
+	pr_debug("      backup_lba: %llu\n", letoh64(hdr->backup_lba));
+	pr_debug("first_usable_lba: %llu\n", letoh64(hdr->first_usable_lba));
+	pr_debug(" last_usable_lba: %llu\n", letoh64(hdr->last_usable_lba));
 	pr_debug("       disk_guid: %s\n", disk_guid);
-	pr_debug("pentry_start_lba: %llu\n", letoh64(hdr.pentry_start_lba));
-	pr_debug("    num_pentries: %u\n", letoh32(hdr.num_pentries));
-	pr_debug("     pentry_size: %u\n", letoh32(hdr.pentry_size));
-	pr_debug("    pentry_crc32: 0x%08X\n", letoh32(hdr.pentry_crc32));
+	pr_debug("pentry_start_lba: %llu\n", letoh64(hdr->pentry_start_lba));
+	pr_debug("    num_pentries: %u\n", letoh32(hdr->num_pentries));
+	pr_debug("     pentry_size: %u\n", letoh32(hdr->pentry_size));
+	pr_debug("    pentry_crc32: 0x%08X\n", letoh32(hdr->pentry_crc32));
 	pr_debug("-------------------------------------\n");
 }
 
 
-static void read_gpt(const char *device)
+static int read_gpt(const char *device, struct gpt_header *hdr,
+		unsigned char **entries_ptr)
 {
 	int fd;
 	size_t entries_size;
 	uint64_t lba_size;
+	unsigned char *entries;
+	uint8_t type;
 
 	lba_size = xatoll(hashmapGetPrintf(ictx.opts, NULL, "disk.%s:lba_size",
 				strrchr(device, '/')+1));
@@ -180,14 +182,34 @@ static void read_gpt(const char *device)
 
 	fd = xopen(device, O_RDONLY);
 
-	xlseek(fd, 1 * lba_size, SEEK_SET);
-	xread(fd, &hdr, sizeof(hdr));
+	xlseek(fd, 0x1be + 0x4, SEEK_SET);
+	xread(fd, &type, sizeof(type));
+	if (type != 0xee) {
+		/* First partition entry in the MBR isn't the protective
+		 * entry. Let's get out of here */
+		pr_debug("Disk %s doesn't seem to have a protective MBR",
+				device);
+		return -1;
+	}
 
-	entries_size = letoh32(hdr.num_pentries) * letoh32(hdr.pentry_size);
+	xlseek(fd, 1 * lba_size, SEEK_SET);
+	xread(fd, hdr, sizeof(*hdr));
+	if (strncmp("EFI PART", hdr->sig, 8)) {
+		/* Not a valid GPT. Technically we should also verify
+		 * the checksums and read the backup GPT, but this is
+		 * good enough for now */
+		pr_debug("GPT header sig invalid\n");
+		return -1;
+	}
+	entries_size = letoh32(hdr->num_pentries) * letoh32(hdr->pentry_size);
 	entries = xmalloc(entries_size);
-	xlseek(fd, letoh32(hdr.pentry_start_lba) * lba_size, SEEK_SET);
+	xlseek(fd, letoh32(hdr->pentry_start_lba) * lba_size, SEEK_SET);
 	xread(fd, entries, entries_size);
 	xclose(fd);
+
+	*entries_ptr = entries;
+
+	return 0;
 }
 
 
@@ -261,11 +283,21 @@ static void partitioner_cli(void)
 }
 
 struct mkpart_ctx {
+	/* Disk device node we're working with */
 	const char *device;
+
+	/* numerical partition index in the GPT; updated with each iteration */
 	int ptn_index;
-	uint64_t last_mb;
-	uint64_t total_mb;
+
+	/* mb offset of the next partition to create */
+	uint64_t next_mb;
+
+	/* Size of non-growable partitions, plus one. Assuming /data
+	 * expands to fit the rest of the space. If this is less than
+	 * disk_mb we're in trouble */
 	uint64_t ptn_mb;
+
+	/* Total available space on the disk */
 	uint64_t disk_mb;
 };
 
@@ -301,8 +333,8 @@ static bool mkpart_cb(char *entry, int index _unused, void *context)
 		part_mb = mc->disk_mb - mc->ptn_mb;
 	mc->ptn_index++;
 	if (execute_command(PARTED " %s mkpart %s %lldMiB %lldMiB",
-			mc->device, entry, mc->last_mb,
-			mc->last_mb + part_mb)) {
+			mc->device, entry, mc->next_mb,
+			mc->next_mb + part_mb)) {
 		die("Parted failure!\n");
 	}
 
@@ -313,7 +345,7 @@ static bool mkpart_cb(char *entry, int index _unused, void *context)
 			mc->device, mc->ptn_index, install_id, entry)) {
 		die("Parted failure!\n");
 	}
-	mc->last_mb += part_mb;
+	mc->next_mb += part_mb;
 	flags = hashmapGetPrintf(ictx.opts, "", "partition.%s:flags", entry);
 	string_list_iterate(flags, flags_cb, mc);
 	xhashmapPut(ictx.opts, xasprintf("partition.%s:index", entry),
@@ -336,10 +368,16 @@ static bool sumsizes_cb(char *entry, int index _unused, void *context)
 	return true;
 }
 
+struct getguid_ctx {
+	struct gpt_header *hdr;
+	unsigned char *entries;
+};
 
-static bool getguid_cb(char *entry, int index, void *context _unused)
+static bool getguid_cb(char *entry, int index, void *context)
 {
-	char *guid = guid_to_string(&(get_entry(index)->part_guid));
+	struct getguid_ctx *gctx = context;
+	struct gpt_entry *e = get_entry(index, gctx->hdr, gctx->entries);
+	char *guid = guid_to_string(&(e->part_guid));
 	xhashmapPut(ictx.opts, xasprintf("partition.%s:guid", entry), guid);
 	return true;
 }
@@ -349,9 +387,12 @@ static void partitioner_execute(void)
 {
 	char *device, *disk, *partlist;
 	struct mkpart_ctx mc;
+	struct getguid_ctx gctx;
 	uint64_t lba_size;
 	int fd;
 	char *install_id_str;
+	struct gpt_header hdr;
+	unsigned char *entries = NULL;
 
 	fd = xopen("/dev/urandom", O_RDONLY);
 	xread(fd, &install_id, sizeof(install_id));
@@ -370,11 +411,11 @@ static void partitioner_execute(void)
 		die();
 	}
 
-	read_gpt(device);
-	dump_header();
+	read_gpt(device, &hdr, &entries);
+	dump_header(&hdr);
 
 	mc.device = device;
-	mc.last_mb = 1;
+	mc.next_mb = 1;
 	mc.ptn_index = 0;
 	mc.ptn_mb = 1;
 
@@ -397,14 +438,17 @@ static void partitioner_execute(void)
 
 	sync_ptable(device);
 
-	read_gpt(device);
-	dump_pentries();
-	string_list_iterate(partlist, getguid_cb, NULL);
+	free(entries);
+	read_gpt(device, &hdr, &entries);
+	dump_pentries(&hdr, entries);
+	gctx.hdr = &hdr;
+	gctx.entries = entries;
+	string_list_iterate(partlist, getguid_cb, &gctx);
 
 	/* Add kernel command line items */
 	xhashmapPut(ictx.cmdline, xstrdup("androidboot.install_id"),
 			install_id_str);
-
+	free(entries);
 	pr_debug("partitioner/execute complete");
 }
 
