@@ -44,6 +44,23 @@ struct guid {
 	uint8_t data4[8]; /* Does not get byte-swapped */
 } __attribute__((__packed__));
 
+#define NAME_MAGIC	"ANDROID!"
+
+#define getbyte(x, s)		(((x) >> (8 * (s))) & 0xFF)
+
+/* Lets you define guids exactly as written out little endian */
+#define GPT_GUID(a, b, c, d1, d2) \
+	((struct guid) \
+	 { htole32(a), htole16(b), htole16(c), \
+	    { getbyte(d1, 1), getbyte(d1, 0), getbyte(d2, 5), getbyte(d2, 4), \
+	       getbyte(d2, 3), getbyte(d2, 2), getbyte(d2, 1), getbyte(d2, 0) } } )
+
+#define partition_for_each(hdr, entries, i, e) \
+	for (i = 0, e = get_entry(i, hdr, entries); \
+			i < letoh32(hdr->num_pentries); \
+			e = get_entry(++i, hdr, entries)) if (!e->first_lba) continue; else
+
+
 /* All fields must have little-endian byte ordering! */
 struct gpt_header {
 	char sig[8];
@@ -71,7 +88,17 @@ struct gpt_entry {
 	uint16_t name[36]; /* UTF-16LE */
 } __attribute__((__packed__));
 
-static uint64_t install_id;
+static struct guid efi_sys_ptn = GPT_GUID(0xC12A7328, 0xF81F, 0x11D2,
+		0xBA4B,	0x00A0C93EC93BULL);
+
+static struct guid ms_reserved_ptn = GPT_GUID(0xE3C9E316, 0x0B5C, 0x4DB8,
+		0x817D, 0xF92DF00215AEULL);
+
+//static struct guid ms_data_ptn = GPT_GUID(0xEBD0A0A2, 0xB9E5, 0x4433,
+//		0x87C0, 0x68B6B72699C7ULL);
+
+static uint32_t install_id;
+
 
 static void sync_ptable(const char *device)
 {
@@ -84,10 +111,29 @@ static void sync_ptable(const char *device)
 	xclose(fd);
 }
 
-static inline int getbyte(uint64_t val, int bytenum)
+static char *lechar16_to_char8(uint16_t *str16)
 {
-	return (int)((val >> (bytenum * 8)) & 0xFF);
+	int i, len = 0;
+	uint16_t *pos;
+	char *ret;
+
+	pos = str16;
+	while (*(pos++))
+		len++;
+
+	ret = xmalloc(len + 1);
+	/* XXX This is NOT how to do utf16le to char * conversion! */
+	for (i = 0; i < len; i++) {
+		uint16_t p = letoh16(str16[i]);
+		if (p > 127)
+			ret[i] = '?';
+		else
+			ret[i] = p;
+	}
+	ret[i] = 0;
+	return ret;
 }
+
 
 static char *guid_to_string(struct guid *g)
 {
@@ -101,13 +147,15 @@ static char *guid_to_string(struct guid *g)
 			g->data4[4], g->data4[5], g->data4[6], g->data4[7]);
 }
 
+
+/* Need to figure out how to rendezvous indexes in GPT
+ * entry table with indices in parted */
 static struct gpt_entry *get_entry(unsigned int entry_index,
 		struct gpt_header *hdr, unsigned char *entries)
 {
 	struct gpt_entry *e;
 	if (entry_index >= letoh32(hdr->num_pentries))
-		die("invalid GPT entry %d (max %d)", entry_index,
-				letoh32(hdr->num_pentries));
+		return NULL;
 
 	e = (struct gpt_entry *)(entries + (letoh32(hdr->pentry_size) *
 				entry_index));
@@ -115,20 +163,18 @@ static struct gpt_entry *get_entry(unsigned int entry_index,
 }
 
 
-static void dump_pentry(struct gpt_entry *ent)
+static void dump_pentry(uint32_t index, struct gpt_entry *ent)
 {
-	char namebuf[36];
-	size_t i;
-	char *partguidstr, *typeguidstr;
+	char *partguidstr, *typeguidstr, *namebuf;
 
-	/* XXX This is NOT how to do utf16le to char * conversion! */
-	for(i = 0; i < sizeof(namebuf); i++)
-		namebuf[i] = (int8_t)letoh16(ent->name[i]);
-
+	namebuf = lechar16_to_char8(ent->name);
 	typeguidstr = guid_to_string(&ent->type_guid);
 	partguidstr = guid_to_string(&ent->part_guid);
-	pr_debug("%s %s %12llu %12llu 0x%016llX %s\n", typeguidstr, partguidstr,
-			ent->first_lba, ent->last_lba, ent->flags, namebuf);
+
+	pr_debug("[%d] %s %s %12llu %12llu 0x%016llX %s\n", index, typeguidstr,
+			partguidstr, ent->first_lba, ent->last_lba, ent->flags,
+			namebuf);
+	free(namebuf);
 	free(typeguidstr);
 	free(partguidstr);
 }
@@ -137,11 +183,11 @@ static void dump_pentry(struct gpt_entry *ent)
 static void dump_pentries(struct gpt_header *hdr, unsigned char *entries)
 {
 	uint32_t i;
+	struct gpt_entry *e;
+
 	pr_debug("----------- GPT ENTRIES -------------\n");
-	for (i = 0; i < letoh32(hdr->num_pentries); i++) {
-		struct gpt_entry *e = get_entry(i, hdr, entries);
-		if (e->first_lba)
-			dump_pentry(e);
+	partition_for_each(hdr, entries, i, e) {
+		dump_pentry(i, e);
 	}
 	pr_debug("-------------------------------------\n");
 }
@@ -213,6 +259,45 @@ static int read_gpt(const char *device, struct gpt_header *hdr,
 }
 
 
+static bool check_for_android(struct gpt_header *hdr, unsigned char *entries,
+		uint32_t *first_ptr, uint32_t *last_ptr)
+{
+	int first = 0, last = 0;
+	uint32_t i;
+	struct gpt_entry *e;
+
+	partition_for_each(hdr, entries, i, e) {
+		char *name = lechar16_to_char8(e->name);
+		if (!strncmp(name, NAME_MAGIC, 8)) {
+			last = i;
+			if (!first)
+				first = i;
+			last = i;
+		} else {
+			if (first)
+				break;
+		}
+	}
+	*first_ptr = first;
+	*last_ptr = last;
+	return first ? true : false;
+}
+
+static int check_for_ptn(struct gpt_header *hdr, unsigned char *entries,
+		struct guid *guid)
+{
+	uint32_t i;
+	struct gpt_entry *e;
+
+	partition_for_each(hdr, entries, i, e) {
+		if (!memcmp(guid, &(e->type_guid), sizeof(struct guid))) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+
 static void partitioner_prepare(void)
 {
 	/* Scan all the existing available disks and populate opts with their info */
@@ -228,6 +313,11 @@ static void partitioner_prepare(void)
 	while (1) {
 		struct dirent *dp = readdir(dir);
 		uint64_t sectors, lba_size;
+		struct gpt_header hdr;
+		unsigned char *entries;
+		char *device;
+		uint32_t first_android, last_android;
+		int ptn_index;
 
 		if (!dp)
 			break;
@@ -237,6 +327,8 @@ static void partitioner_prepare(void)
 			continue;
 		if (!strcmp(dp->d_name, media))
 			continue;
+
+		device = xasprintf("/dev/block/%s", dp->d_name);
 		sectors = read_sysfs_int("/sys/block/%s/size", dp->d_name);
 		lba_size = read_sysfs_int("/sys/block/%s/queue/logical_block_size",
 				dp->d_name);
@@ -249,7 +341,49 @@ static void partitioner_prepare(void)
 				xasprintf("%llu", (lba_size * sectors) >> 20));
 		xhashmapPut(ictx.opts, xasprintf("disk.%s:model", dp->d_name),
 				read_sysfs("/sys/block/%s/device/model", dp->d_name));
+		xhashmapPut(ictx.opts, xasprintf("disk.%s:device", dp->d_name),
+				device);
 		string_list_append(&disks, dp->d_name);
+
+		if (read_gpt(hashmapGetPrintf(ictx.opts, NULL, "disk.%s:device", dp->d_name),
+					&hdr, &entries))
+			continue;
+
+		ptn_index = check_for_ptn(&hdr, entries, &ms_reserved_ptn);
+		if (ptn_index >= 0) {
+			/* User data NTFS partition always right after
+			 * the ms reserved partition */
+			int ms_data_idx = ptn_index + 1;
+			pr_debug("%s: Found Windows data at partition index %d\n",
+					dp->d_name, ms_data_idx);
+			xhashmapPut(ictx.opts,
+				xasprintf("disk.%s:msdata_index", dp->d_name),
+				xasprintf("%d", ms_data_idx));
+		} else
+			pr_debug("%s: No Windows installation found\n", dp->d_name);
+
+		ptn_index = check_for_ptn(&hdr, entries, &efi_sys_ptn);
+		if (ptn_index >= 0) {
+			/* We found an EFI system partition and should
+			 * re-use it */
+			pr_debug("%s: Found ESP at partition index %d\n",
+					dp->d_name, ptn_index);
+			xhashmapPut(ictx.opts,
+				xasprintf("disk.%s:esp_index", dp->d_name),
+				xasprintf("%d", ptn_index));
+		} else
+			pr_debug("%s: no EFI System Partition found\n",
+					dp->d_name);
+
+		if (check_for_android(&hdr, entries, &first_android,
+					&last_android)) {
+			xhashmapPut(ictx.opts,
+				xasprintf("disk.%s:first_android", dp->d_name),
+				xasprintf("%d", first_android));
+			xhashmapPut(ictx.opts,
+				xasprintf("disk.%s:last_android", dp->d_name),
+				xasprintf("%d", last_android));
+		}
 	}
 	closedir(dir);
 	xhashmapPut(ictx.opts, xasprintf(BASE_DISK_LIST), disks);
@@ -341,8 +475,9 @@ static bool mkpart_cb(char *entry, int index _unused, void *context)
 	if (strlen(entry) > 27)
 		die("Partition '%s' name too long!", entry);
 
-	if (execute_command(PARTED " %s name %d %016llX%s",
-			mc->device, mc->ptn_index, install_id, entry)) {
+	if (execute_command(PARTED " %s name %d %s%08X%s",
+			mc->device, mc->ptn_index, NAME_MAGIC, install_id,
+			entry)) {
 		die("Parted failure!\n");
 	}
 	mc->next_mb += part_mb;
@@ -397,7 +532,7 @@ static void partitioner_execute(void)
 	fd = xopen("/dev/urandom", O_RDONLY);
 	xread(fd, &install_id, sizeof(install_id));
 	xclose(fd);
-	install_id_str = xasprintf("%016llX", install_id);
+	install_id_str = xasprintf("%s%08X", NAME_MAGIC, install_id);
 	if (property_set("ro.boot.install_id", install_id_str))
 		die("Unable to set ro.boot.install_id");
 
