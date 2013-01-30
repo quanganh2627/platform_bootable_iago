@@ -134,6 +134,7 @@ static void gummiboot_execute(void)
 	fd = xopen(BOOTLOADER_PATH "/loader/loader.conf", O_WRONLY | O_CREAT);
 	put_string(fd, "timeout %s\n", hashmapGetPrintf(ictx.opts, TIMEOUT_DFL, GUMMIBOOT_TIMEOUT));
 	put_string(fd, "default boot\n");
+	put_string(fd, "android-bcb %s\n", hashmapGetPrintf(ictx.opts, NULL, "partition.misc:guid"));
 	xclose(fd);
 
 	xmkdir(BOOTLOADER_PATH "/loader/entries", 0777);
