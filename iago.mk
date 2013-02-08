@@ -5,4 +5,5 @@ PRODUCT_PACKAGES += \
 	resize2fs \
 	e2fsck \
 	tune2fs \
+        ntfsresize \
 

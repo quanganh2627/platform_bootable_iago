@@ -24,6 +24,8 @@
 #include <iniparser.h>
 #include <cutils/list.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #define _unused __attribute__((unused))
 #define _noreturn __attribute__((noreturn))
@@ -32,6 +34,8 @@
  * these functions */
 int execute_command(const char *fmt, ...) __attribute__((format(printf,1,2)));
 int execute_command_data(void *data, unsigned sz, const char *fmt, ...)
+		__attribute__((format(printf,3,4)));
+int execute_command_output(void *data, size_t *sz_ptr, const char *fmt, ...)
 		__attribute__((format(printf,3,4)));
 
 #define die(fmt, ...) __die("%s:%s:%d " fmt, __FILE__, __func__, __LINE__, \
@@ -49,6 +53,7 @@ int is_valid_blkdev(const char *node);
 char *xstrdup(const char *s);
 char *xasprintf(const char *fmt, ...) __attribute__((format(printf,1,2)));
 void *xmalloc(size_t size);
+void *xcalloc(size_t nmemb, size_t size);
 off_t xlseek(int fd, off_t offset, int whence);
 ssize_t xread(int fd, void *buf, size_t count);
 int xopen(const char *pathname, int flags);
@@ -99,6 +104,5 @@ char *ui_option_get(const char *question, struct listnode *list);
 bool ui_ask(const char *question, bool dfl);
 void option_list_free(struct listnode *list);
 void ui_pause(void);
-unsigned int ui_get_integer(const char *question, unsigned int dfl);
-
+int64_t ui_get_value(const char *question, int64_t dfl, int64_t min, int64_t max);
 #endif

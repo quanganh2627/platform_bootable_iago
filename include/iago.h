@@ -105,9 +105,12 @@ void add_iago_plugin(struct iago_plugin *p);
  * and model */
 #define BASE_DISK_LIST		"base:disks"
 
-/* Path to device node for installation disk. The bootloader and boot
- * images need to reside here */
-#define BASE_INSTALL_DEV	"base:install_device"
+/* Name of the installation disk for referencing disk.XX config entrie.
+ * Name of the device node without path information */
+#define BASE_INSTALL_DISK	"base:install_disk"
+
+/* Nonzero if we are installing in a dual boot configuration */
+#define BASE_DUAL_BOOT		"base:dualboot"
 
 /* Name of the bootloader plug-in in use, if any */
 #define BASE_BOOTLOADER		"base:bootloader"

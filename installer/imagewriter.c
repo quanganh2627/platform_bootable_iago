@@ -30,6 +30,8 @@ static bool execute_cb(char *entry, int index _unused, void *context _unused)
 {
 	char *type, *src, *device, *prefix, *mode;
 	ssize_t footer;
+	struct stat sb;
+	int count = 20;
 
 	pr_info("Processing %s partition\n", entry);
 
@@ -37,6 +39,13 @@ static bool execute_cb(char *entry, int index _unused, void *context _unused)
 	type = hashmapGetPrintf(ictx.opts, NULL, "%s:type", prefix);
 	device = hashmapGetPrintf(ictx.opts, NULL, "%s:device", prefix);
 	mode = hashmapGetPrintf(ictx.opts, NULL, "%s:mode", prefix);
+
+	while (stat(device, &sb)) {
+		if (!count--)
+			die("stat %s", device);
+		pr_info("Waiting for %s...", device);
+		sleep(1);
+	}
 
 	if (!strcmp(mode, "format")) {
 		pr_info("Formatting %s (%s)", device, type);
@@ -62,18 +71,9 @@ static bool execute_cb(char *entry, int index _unused, void *context _unused)
 			die();
 		}
 	} else if (!strcmp(mode, "image")) {
-		struct stat sb;
-		int count = 15;
 		src = xasprintf("/installmedia/images/%s",
 				(char *)hashmapGetPrintf(ictx.opts, NULL,
 					"%s:src", prefix));
-
-		while (stat(device, &sb)) {
-			if (!count--)
-				die("stat %s", device);
-			pr_info("Waiting for %s...", device);
-			sleep(1);
-		}
 
 		pr_info("Writing %s (%s) -> %s", src, type, device);
 		dd(src, device);
@@ -90,6 +90,22 @@ static bool execute_cb(char *entry, int index _unused, void *context _unused)
 			pr_error("unsupported fs type '%s'\n", type);
 			die();
 		}
+	} else if (!strcmp(mode, "zero")) {
+		int fd;
+		void *data;
+
+		fd = xopen(device, O_WRONLY);
+		data = xcalloc(1, 1024 * 1024);
+		while (1) {
+			ssize_t ret;
+
+			ret = write(fd, data, 1024 * 1024);
+			if (ret == 0 || (ret < 0 && errno == ENOSPC))
+				break;
+			if (ret < 0)
+				die_errno("write");
+		}
+		free(data);
 	} else if (!strcmp(mode, "skip")) {
 		/* probably special handling later; do nothing */
 	} else {

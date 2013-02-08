@@ -35,7 +35,7 @@
 #include <iago.h>
 #include <iago_util.h>
 
-
+/* TODO: replace with exception handling using setjmp/longjmp */
 void __die(const char *fmt, ...)
 {
 	va_list ap;
@@ -60,7 +60,16 @@ void *xmalloc(size_t size)
 {
 	void *ret = malloc(size);
 	if (!ret)
-		die_errno("malloc allocation size: %d", size);
+		die_errno("malloc allocation size: %zu", size);
+	return ret;
+}
+
+
+void *xcalloc(size_t nmemb, size_t size)
+{
+	void *ret = calloc(nmemb, size);
+	if (!ret)
+		die_errno("calloc allocation size: %zu members of size %zu", nmemb, size);
 	return ret;
 }
 
@@ -342,6 +351,58 @@ int execute_command_data(void *data, unsigned sz, const char *fmt, ...)
 }
 
 
+/* Execute a command and capture stdout.
+ *
+ * data - Buffer to place read data in
+ * sz_ptr - Pointer to size of data buffer. Value is replaced with actual
+ * number of bytes read
+ * fmt... - Shell command to execute
+ * returns -1 on error or the shell exit status
+ */
+int execute_command_output(void *data, size_t *sz_ptr, const char *fmt, ...)
+{
+	int ret = -1;
+	va_list ap;
+	char *cmd;
+	FILE *fp;
+	size_t bytes_read;
+	size_t sz = *sz_ptr;
+
+	va_start(ap, fmt);
+	if (vasprintf(&cmd, fmt, ap) < 0) {
+		pr_perror("vasprintf");
+		return -1;
+	}
+	va_end(ap);
+
+	pr_debug("Executing: '%s'\n", cmd);
+	fp = popen(cmd, "r");
+	free(cmd);
+	if (!fp) {
+		pr_perror("popen");
+		return -1;
+	}
+
+	bytes_read = fread(data, 1, sz, fp);
+	if (ferror(fp)) {
+		pr_perror("fwrite");
+		pclose(fp);
+		return -1;
+	}
+	*sz_ptr = bytes_read;
+
+	ret = pclose(fp);
+	if (ret < 0) {
+		pr_perror("pclose");
+		return -1;
+	}
+	ret = WEXITSTATUS(ret);
+	pr_debug("Execution complete, retval=%d\n", ret);
+
+	return ret;
+}
+
+
 int is_valid_blkdev(const char *node)
 {
 	struct stat statbuf;
@@ -370,17 +431,53 @@ int str_hash(void *key)
 	return hashmapHash(s, strlen(s));
 }
 
-static bool hashmap_dump_cb(void *key, void *value, void *context _unused)
+
+struct hashmap_entry {
+	char *key;
+	char *value;
+};
+
+
+static int hashmap_entry_cmp(const void *a, const void *b)
 {
-	pr_debug("[%s] = '%s'\n", (char *)key, (char *)value);
+	const struct hashmap_entry *hca = a;
+	const struct hashmap_entry *hcb = b;
+	return strcmp(hca->key, hcb->key);
+}
+
+
+struct hashmap_cb_ctx {
+	struct hashmap_entry *hlist;
+	int index;
+};
+
+
+static bool hashmap_dump_cb(void *key, void *value, void *context)
+{
+	struct hashmap_cb_ctx *hc = context;
+	hc->hlist[hc->index].key = key;
+	hc->hlist[hc->index].value = value;
+	hc->index++;
 	return true;
 }
 
+
 void hashmap_dump(Hashmap *h)
 {
-	/* FIXME this would be much easier to read if the keys were
-	 * sorted first */
-	hashmapForEach(h, hashmap_dump_cb, NULL);
+	struct hashmap_entry *hlist;
+	struct hashmap_cb_ctx hc;
+	size_t count;
+	unsigned int i;
+
+	count = hashmapSize(h);
+	hlist = xcalloc(count, sizeof(struct hashmap_entry));
+	hc.hlist = hlist;
+	hc.index = 0;
+	hashmapForEach(h, hashmap_dump_cb, &hc);
+	qsort(hlist, count, sizeof(struct hashmap_entry), hashmap_entry_cmp);
+	for (i = 0; i < count; i++)
+		pr_debug("[%s] = '%s'\n", hlist[i].key, hlist[i].value);
+	free(hlist);
 }
 
 static bool hashmap_destroy_cb(void *key, void *value, void *context _unused) {
@@ -619,19 +716,21 @@ again:
 	}
 }
 
-unsigned int ui_get_integer(const char *question, unsigned int dfl)
+int64_t ui_get_value(const char *question, int64_t dfl, int64_t min,
+		int64_t max)
 {
-	char buf[32];
+	char buf[4096];
 	unsigned int result;
 again:
 	errno = 0;
-	fprintf(stdout, "%s (enter=%d): ", question, dfl);
+	fprintf(stdout, "%s (min=%lld,max=%lld,enter=%lld): ",
+			question, min, max, dfl);
 	fgets(buf, sizeof(buf), stdin);
 	if (buf[0] == '\n')
 		return dfl;
 
-	result = (unsigned int)strtoul(buf, NULL, 0);
-	if (errno)
+	result = (unsigned int)strtoull(buf, NULL, 0);
+	if (errno || result < min || result > max)
 		goto again;
 	return result;
 }

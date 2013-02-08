@@ -41,28 +41,24 @@
 
 void gummiboot_cli(void)
 {
-	char *plist;
 	unsigned int timeout;
+
+	// TODO skip if BASE_BOOTLOADER is set already
 
 	if (!ui_ask("Install GummiBoot bootloader?", true))
 		return;
 
-	plist = hashmapGetPrintf(ictx.opts, NULL, BASE_PTN_LIST);
-	string_list_prepend(&plist, "bootloader");
-	xhashmapPut(ictx.opts, xstrdup(BASE_PTN_LIST), plist);
 	xhashmapPut(ictx.opts, xstrdup(BASE_BOOTLOADER),
 			xstrdup("gummiboot"));
-	timeout = ui_get_integer("Enter boot menu timeout (0=no menu)", atoi(TIMEOUT_DFL));
+	timeout = ui_get_value("Enter boot menu timeout (0=no menu)",
+			xatoll(TIMEOUT_DFL), 0, 60);
 	xhashmapPut(ictx.opts, xstrdup(GUMMIBOOT_TIMEOUT),
 			xasprintf("%u", timeout));
 }
 
+
 static void gummiboot_prepare(void)
 {
-	/* bootloader2 partition is used during OTA updates to atomically
-	 * update the ESP. */
-	xhashmapPut(ictx.opts, xstrdup("partition.bootloader2:len"),
-		    xstrdup(hashmapGetPrintf(ictx.opts, NULL, "partition.bootloader:len")));
 }
 
 
@@ -130,6 +126,8 @@ static void gummiboot_execute(void)
 	pr_info("Copying gummiboot support files");
 	copy_file(IMAGES_PATH "/gummiboot.efi", BOOTLOADER_PATH "/gummiboot.efi");
 
+	// TODO recursively delete loader directory if it already exists
+
 	xmkdir(BOOTLOADER_PATH "/loader", 0777);
 	fd = xopen(BOOTLOADER_PATH "/loader/loader.conf", O_WRONLY | O_CREAT);
 	put_string(fd, "timeout %s\n", hashmapGetPrintf(ictx.opts, TIMEOUT_DFL, GUMMIBOOT_TIMEOUT));
@@ -141,8 +139,8 @@ static void gummiboot_execute(void)
 	pr_info("Constructing loader entries");
 	string_list_iterate(bootimages, bootimage_cb, (void*)fd);
 
-	ret = execute_command("efibootmgr -c -d %s -l \\\\gummiboot.efi -v -p %s -D %s -L %s",
-			hashmapGetPrintf(ictx.opts, NULL, BASE_INSTALL_DEV),
+	ret = execute_command("efibootmgr -c -d /dev/block/%s -l \\\\gummiboot.efi -v -p %s -D %s -L %s",
+			hashmapGetPrintf(ictx.opts, NULL, BASE_INSTALL_DISK),
 			hashmapGetPrintf(ictx.opts, NULL, "partition.bootloader:index"),
 			EFI_ENTRY, EFI_ENTRY);
 	if (ret)
