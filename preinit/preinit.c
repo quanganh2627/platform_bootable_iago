@@ -292,7 +292,7 @@ int main(void)
             dbg("Iago media not found, trying again...\n");
             continue;
         }
-        dbg("Couldn't find Iago media!\n");
+        KLOG_ERROR("Iago", "Couldn't find installation media!\n");
         exit(1); /* will result in kernel panic */
     }
 

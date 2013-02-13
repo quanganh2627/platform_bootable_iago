@@ -684,11 +684,11 @@ int64_t read_sysfs_int(const char *fmt, ...)
 void ui_printf(const char *fmt, ...)
 {
 	va_list ap;
-	char buf[256];
+	char buf[8192];
 
 	fputs("iago: ", stdout);
 	va_start(ap, fmt);
-	vsnprintf(buf, 256, fmt, ap);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 
 	fputs(buf, stdout);

@@ -30,6 +30,19 @@
 #define _unused __attribute__((unused))
 #define _noreturn __attribute__((noreturn))
 
+#define max(a,b) \
+   ({ __typeof__ (a) _a = (a); \
+       __typeof__ (b) _b = (b); \
+     _a > _b ? _a : _b; })
+
+#ifdef min /* stupid ext4_utils.h header...they didn't even implement it right */
+#undef min
+#endif
+#define min(a,b) \
+   ({ __typeof__ (a) _a = (a); \
+       __typeof__ (b) _b = (b); \
+     _a < _b ? _a : _b; })
+
 /* Attribute specification and -Werror prevents most security shenanigans with
  * these functions */
 int execute_command(const char *fmt, ...) __attribute__((format(printf,1,2)));

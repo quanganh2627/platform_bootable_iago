@@ -154,6 +154,12 @@ static uint64_t round_up_to_multiple(uint64_t val, uint64_t multiple)
 }
 
 
+static uint64_t mib_align(uint64_t val)
+{
+	return round_up_to_multiple(val, 1 << 20);
+}
+
+
 static uint64_t to_unit_ceiling(uint64_t val, uint64_t unit)
 {
 	return round_up_to_multiple(val, unit) / unit;
@@ -250,7 +256,7 @@ static uint64_t get_entry_size(unsigned int entry_index, struct gpt *gpt)
 	struct gpt_entry *e = get_entry(entry_index, gpt);
 	if (!e)
 		die("Invalid entry %u", entry_index);
-	return (letoh64(e->last_lba) - letoh64(e->first_lba)) * gpt->lba_size;
+	return ((letoh64(e->last_lba) + 1) - letoh64(e->first_lba)) * gpt->lba_size;
 }
 
 
@@ -389,7 +395,9 @@ static void regen_gpt(struct gpt *gpt)
 
 
 /* Examine the disk for an existing Android installation,
- * returning the number of bytes it is taking up on the disk */
+ * returning the number of bytes it is taking up on the disk
+ * to show how much space can be freed. The ESP is not counted
+ * since it wouldn't be deleted */
 static uint64_t check_for_android(struct gpt *gpt)
 {
 	uint32_t i;
@@ -399,8 +407,11 @@ static uint64_t check_for_android(struct gpt *gpt)
 	size = 0;
 	partition_for_each(gpt, i, e) {
 		char *name = lechar16_to_char8(e->name);
-		if (!strncmp(name, NAME_MAGIC, 8))
-			size += get_entry_size(i, gpt);
+		if (strncmp(name, NAME_MAGIC, 8))
+			continue;
+		if (strlen(name) == 26 && !strcmp(name + 16, "bootloader"))
+			continue; /* skip the ESP */
+		size += get_entry_size(i, gpt);
 	}
 	return size;
 }
@@ -553,8 +564,10 @@ static int64_t get_ntfs_min_size(int index, struct gpt *gpt)
 	ret = execute_command_output(buf, &sz,
 			"ntfsresize --no-progress-bar --info %s", device);
 	free(device);
-	if (ret)
+	if (ret) {
+		pr_info("%s", buf);
 		return -EIO;
+	}
 	pos = strstr(buf, needle);
 	if (!pos)
 		die("ntfsresize returned '%s'", buf);
@@ -642,7 +655,9 @@ static void partitioner_prepare(void)
 
 	while (1) {
 		struct dirent *dp = readdir(dir);
-		uint64_t sectors, lba_size, android_size;
+		uint64_t sectors, lba_size;
+		uint64_t android_size;
+		uint64_t free_start_lba, free_end_lba;
 		struct gpt gpt;
 		char *device;
 		int ptn_index;
@@ -727,11 +742,10 @@ static void partitioner_prepare(void)
 				xasprintf("%d", ptn_index));
 			xhashmapPut(ictx.opts,
 				xasprintf("disk.%s:esp_size", dp->d_name),
-				xasprintf("%llu", get_entry_size(ptn_index, &gpt)));
+				xasprintf("%llu", mib_align(get_entry_size(ptn_index, &gpt))));
 		} else
 			pr_debug("%s: no EFI System Partition found\n",
 					dp->d_name);
-
 		android_size = check_for_android(&gpt);
 		if (android_size) {
 			pr_info("Disk %s has an existing Android installation",
@@ -740,7 +754,17 @@ static void partitioner_prepare(void)
 				xasprintf("disk.%s:android_size", dp->d_name),
 				xasprintf("%llu", android_size));
 		}
-
+		if (!find_contiguous_free_space(&gpt, &free_start_lba, &free_end_lba)) {
+			xhashmapPut(ictx.opts,
+				xasprintf("disk.%s:free_size", dp->d_name),
+				xasprintf("%llu", ((free_end_lba + 1) - free_start_lba) * gpt.lba_size));
+			xhashmapPut(ictx.opts,
+				xasprintf("disk.%s:free_start_lba", dp->d_name),
+				xasprintf("%llu", free_start_lba));
+			xhashmapPut(ictx.opts,
+				xasprintf("disk.%s:free_end_lba", dp->d_name),
+				xasprintf("%llu", free_end_lba));
+		}
 	}
 	closedir(dir);
 	xhashmapPut(ictx.opts, xasprintf(BASE_DISK_LIST), disks);
@@ -779,8 +803,10 @@ static bool sumsizes_cb(char *entry, int index _unused, void *context)
 /* Calculate the disk space required for the Android installation.
  * esp_sizes is addional esp_space needed. If we're doing dual boot
  * and preserving the existing ESP, this is the size for the backup ESP
- * partition. Otherwise, its the combined size of both */
-static uint64_t get_space_required(uint64_t esp_sizes)
+ * partition. Otherwise, its the combined size of both. Returned value
+ * does not include the data partition; add MIN_DATA_PART_SIZE if you
+ * need that too.*/
+static uint64_t get_partial_space_required(uint64_t esp_sizes)
 {
 	char *partlist;
 	uint64_t total = 0;
@@ -793,14 +819,28 @@ static uint64_t get_space_required(uint64_t esp_sizes)
 }
 
 
-/* XXX FIXME TODO this is hacked-together crapola that doesn't do
- * enough checks and isn't flexible enough */
+static uint64_t get_all_space_required(char *disk, bool dualboot)
+{
+	uint64_t bootloader_size;
+
+	if (dualboot) {
+		/* Space for backup copy of existing ESP already on disk */
+		bootloader_size = xatol(hashmapGetPrintf(ictx.opts, "0",
+					"disk.%s:esp_size", disk));
+	} else {
+		bootloader_size = (xatoll(hashmapGetPrintf(ictx.opts, NULL,
+				"partition.bootloader:len")) << 20) * 2;
+	}
+	return get_partial_space_required(bootloader_size) + (MIN_DATA_PART_SIZE << 20);
+}
+
+
 static void partitioner_cli(void)
 {
 	char *disk;
-	uint64_t android_size, windows_size, windows_min_size;
-	uint64_t total_free_size, required_size;
-	uint64_t new_windows_size, esp_size;
+	int64_t android_size, windows_size, windows_min_size, free_size;
+	int64_t windows_max_size, total_free_size, required_size;
+	int64_t disk_size, new_windows_size;
 
 	bool can_resize = false;
 
@@ -815,22 +855,25 @@ static void partitioner_cli(void)
 				xstrdup(disk));
 	option_list_free(&disk_list);
 
-	android_size = xatoll(hashmapGetPrintf(ictx.opts, "0",
-				"disk.%s:android_size", disk));
 	windows_size = xatoll(hashmapGetPrintf(ictx.opts, "0",
 				"disk.%s:msdata_size", disk));
 	windows_min_size = xatoll(hashmapGetPrintf(ictx.opts, "0",
 				"disk.%s:msdata_minsize", disk));
-	esp_size = xatol(hashmapGetPrintf(ictx.opts, "0",
-				"disk.%s:esp_size", disk));
+	disk_size = xatoll(hashmapGetPrintf(ictx.opts, NULL,
+				"disk.%s:size", disk));
+	android_size = xatoll(hashmapGetPrintf(ictx.opts, "0",
+				"disk.%s:android_size", disk));
+	free_size = xatoll(hashmapGetPrintf(ictx.opts, "0",
+				"disk.%s:free_size", disk));
 
 	if (android_size)
 		pr_info("Android installation detected. It will be deleted, freeing %llu MiB",
-				to_mib(android_size));
+				to_mib_floor(android_size));
+	if (free_size)
+		pr_info("Unpartitioned space: %llu MiB",
+				to_mib_floor(free_size));
 
-	total_free_size = android_size;
-
-	if (windows_size && esp_size) {
+	if (windows_size) {
 		pr_info("Windows data partition detected of size %llu MiB.",
 				to_mib(windows_size));
 		if (windows_min_size) {
@@ -838,32 +881,66 @@ static void partitioner_cli(void)
 					to_mib(windows_min_size));
 			can_resize = true;
 		} else {
-			pr_info("However, you need to reboot into Windows and run chkdsk on it, it cannot be resized right now.");
+			pr_info("However, you need to reboot into Windows and scan the drive for errors, it cannot be resized right now.");
 		}
 
+		pr_info("IMPORTANT: Back up ALL data before installing a dual boot configuration");
 		if (ui_ask("Do you want to preserve Windows and dual boot?", true)) {
+			bool must_resize = false;
 
-			// XXX should be any unpartitioned space after windows data.
-			// these calculations are somewhat complex and should be handled better
-			// right now we're assuming android is immediately after windows data.
-			// maybe present user with option to drop into interactive parted session.
-			total_free_size = android_size;
-			required_size = get_space_required(esp_size);
-			pr_info("Total current free space is %llu MiB. We require at least %llu MiB.",
-					to_mib(total_free_size), to_mib(required_size));
+			/* Assumes if Android is present, there is no
+			 * additional free space on the disk. Reasonable given
+			 * how /data is expanded. We should still add an
+			 * advanced partitioning option which drops into
+			 * an internactive parted session */
+			if (android_size)
+				total_free_size = android_size;
+			else
+				total_free_size = free_size;
+			if (android_size && to_mib_floor(free_size) != 0)
+				pr_info("Your disk is in a weird state, with extra free space. Consider manually repartitioning");
 
+			required_size = get_all_space_required(disk, true);
+			pr_info("Total available free space is %llu MiB. We require at least %llu MiB.",
+					to_mib_floor(total_free_size), to_mib(required_size));
+			if (required_size > total_free_size) {
+				windows_max_size = windows_size - (required_size - total_free_size);
+				must_resize = true;
+				if (windows_max_size < 0 ||
+						windows_max_size < windows_min_size || !can_resize) {
+					die("Not enough free room on the disk to install Android, and Windows cannot be shrunk enough to make space");
+				}
+			} else {
+				windows_max_size = windows_size;
+			}
+			pr_info("NOTE: If you resize Windows, it will undergo a repair cycle the next time it boots. This is normal.");
 			if (can_resize && ui_ask("Do you want to resize Windows to make more space?", true)) {
 				new_windows_size = ui_get_value("Enter new size in MiB for Windows",
-						to_mib(windows_size),
+						to_mib_floor(windows_max_size),
 						to_mib(windows_min_size),
-						to_mib(windows_size));
+						to_mib_floor(windows_max_size));
 				xhashmapPut(ictx.opts,
 						xasprintf("disk.%s:windows_resize", disk),
 						xasprintf("%llu", new_windows_size << 20));
+			} else if (must_resize) {
+				die("Insufficient free space to proceed.");
 			}
 			xhashmapPut(ictx.opts, xstrdup("base:dualboot"), xstrdup("1"));
+			return;
 		}
 	}
+
+	/* If we get here then there was no Windows partition or we decided not to Dual Boot */
+	pr_info("ALL data on the target disk will be erased!");
+	if (!ui_ask("Do you want to continue?", false))
+		die("Aborted installation due to user request");
+	required_size = get_all_space_required(disk, false);
+	/* FIXME slightly off as not all of the disk size is usable, but if we don't have
+	 * a GPT it's hard to accurately calculate it. Shave off 2 megabytes to be safe */
+	disk_size -= (2 * 1024 * 1024);
+	if (disk_size < required_size)
+		die("Insuffcient disk size (%lld MiB available) to install Android (need %lld MiB)",
+                        to_mib_floor(disk_size), to_mib(required_size));
 }
 
 
@@ -983,7 +1060,7 @@ static void create_android_partitions(uint64_t bootloader_size, char *partlist,
 	uint64_t space_available_mb;
 	struct mkpart_ctx mc;
 
-	space_needed_mb = to_mib(get_space_required(bootloader_size));
+	space_needed_mb = to_mib(get_partial_space_required(bootloader_size));
 
 	if (find_contiguous_free_space(gpt, &start_lba, &end_lba))
 		die("Couldn't calculate unpartitioned disk space");
@@ -991,10 +1068,12 @@ static void create_android_partitions(uint64_t bootloader_size, char *partlist,
 	start_mb = to_mib(start_lba * gpt->lba_size);
 	end_mb = to_mib_floor((end_lba + 1) * gpt->lba_size);
 	space_available_mb = end_mb - start_mb;
-	if (space_available_mb < space_needed_mb)
+	if (space_available_mb < (space_needed_mb + MIN_DATA_PART_SIZE)) {
+		pr_error("Please install interactively to re-partition the disk");
 		die("Insufficient disk space (have %llu MiB need %llu MiB)",
 				space_available_mb,
-				space_needed_mb);
+				space_needed_mb + MIN_DATA_PART_SIZE);
+	}
 
 	/* Always the same size */
 	xhashmapPut(ictx.opts, xstrdup("partition.bootloader2:len"),
@@ -1014,11 +1093,10 @@ static void create_android_partitions(uint64_t bootloader_size, char *partlist,
 }
 
 
-static void execute_dual_boot(uint32_t win_index, char *disk,
-		char *partlist, char *device)
+static void execute_dual_boot(char *disk, char *partlist, char *device)
 {
 	uint64_t esp_size, win_resize;
-	uint32_t esp_index;
+	uint32_t esp_index, win_index;
 	char *name;
 	struct gpt gpt;
 
@@ -1029,6 +1107,13 @@ static void execute_dual_boot(uint32_t win_index, char *disk,
 				"disk.%s:esp_size", disk));
 	esp_index = xatol(hashmapGetPrintf(ictx.opts, "0",
 				"disk.%s:esp_index", disk));
+	win_index = xatol(hashmapGetPrintf(ictx.opts, "0",
+				"disk.%s:msdata_index", disk));
+
+	if (!esp_index) {
+		pr_info("Dual boot selected, but no existing EFI system partition found.");
+		die("Please use the interactive installer to wipe the disk; you cannot dual boot.");
+	}
 
 	if (win_resize) {
 		pr_info("Resizing Windows partition");
@@ -1093,7 +1178,6 @@ static void partitioner_execute(void)
 	char *disk, *device, *partlist;
 	bool dualboot;
 	struct gpt gpt;
-	uint32_t win_index;
 
 	partlist = hashmapGetPrintf(ictx.opts, NULL, BASE_PTN_LIST);
 	disk = hashmapGetPrintf(ictx.opts, NULL,
@@ -1101,13 +1185,9 @@ static void partitioner_execute(void)
 	device = xasprintf("/dev/block/%s", disk);
 	dualboot = xatol(hashmapGetPrintf(ictx.opts, "0",
 				"base:dualboot"));
-	/* Confirms that there is indeed a Windows data partition
-	 * and hence dual boot is possible */
-	win_index = xatol(hashmapGetPrintf(ictx.opts, "0",
-				"disk.%s:msdata_index", disk));
 	set_install_id();
-	if (win_index && dualboot) {
-		execute_dual_boot(win_index, disk, partlist, device);
+	if (dualboot) {
+		execute_dual_boot(disk, partlist, device);
 	} else {
 		execute_wipe_disk(partlist, device);
 	}
