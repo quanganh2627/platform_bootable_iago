@@ -616,7 +616,7 @@ static void delete_android(struct gpt *gpt)
 		name = lechar16_to_char8(e->name);
 
 		if (strncmp(name, NAME_MAGIC, 8))
-                        continue;
+			continue;
 		if (strlen(name) == 26 && !strcmp(name + 16, "bootloader"))
 			continue;
 
@@ -1015,12 +1015,14 @@ static void create_android_partitions(uint64_t bootloader_size, char *partlist,
 
 
 static void execute_dual_boot(uint32_t win_index, char *disk,
-		char *partlist, struct gpt *gpt)
+		char *partlist, char *device)
 {
 	uint64_t esp_size, win_resize;
 	uint32_t esp_index;
 	char *name;
+	struct gpt gpt;
 
+	xread_gpt(device, &gpt);
 	win_resize = xatoll(hashmapGetPrintf(ictx.opts, "0",
 				"disk.%s:windows_resize", disk));
 	esp_size = xatoll(hashmapGetPrintf(ictx.opts, "0",
@@ -1030,13 +1032,13 @@ static void execute_dual_boot(uint32_t win_index, char *disk,
 
 	if (win_resize) {
 		pr_info("Resizing Windows partition");
-		resize_ntfs_partition(win_index, gpt, win_resize);
+		resize_ntfs_partition(win_index, &gpt, win_resize);
 	}
 
 	if (xatoll(hashmapGetPrintf(ictx.opts, "0",
 				"disk.%s:android_size", disk))) {
 		pr_info("Deleting existing Android installation");
-		delete_android(gpt);
+		delete_android(&gpt);
 	}
 
 	/* Claim existing ESP as our own bootloader partition */
@@ -1048,26 +1050,29 @@ static void execute_dual_boot(uint32_t win_index, char *disk,
 			xasprintf("%u", esp_index));
 	xhashmapPut(ictx.opts, xstrdup("partition.bootloader:device"),
 			xstrdup("/dev/block/by-name/bootloader"));
-	create_android_partitions(esp_size, partlist, gpt, true);
+	create_android_partitions(esp_size, partlist, &gpt, true);
 	name = gpt_name("bootloader");
 	if (execute_command(PARTED " %s name %d %s",
-				gpt->device, esp_index, name))
+				gpt.device, esp_index, name))
 		die("Parted failure setting partition name to '%s'", name);
 	free(name);
+	close_gpt(&gpt);
 }
 
 
-static void execute_wipe_disk(char *partlist, struct gpt *gpt)
+static void execute_wipe_disk(char *partlist, char *device)
 {
 	uint64_t bootloader_size;
+	struct gpt gpt;
 
-	pr_debug("Creating new partition table for %s", gpt->device);
-	if (execute_command(PARTED " %s mklabel gpt", gpt->device))
+	pr_debug("Creating new partition table for %s", device);
+	if (execute_command(PARTED " %s mklabel gpt", device))
 		die("Parted failure!\n");
-	regen_gpt(gpt);
+	xread_gpt(device, &gpt);
 	bootloader_size = (xatoll(hashmapGetPrintf(ictx.opts, NULL,
 				"partition.bootloader:len")) << 20) * 2;
-	create_android_partitions(bootloader_size, partlist, gpt, false);
+	create_android_partitions(bootloader_size, partlist, &gpt, false);
+	close_gpt(&gpt);
 }
 
 
@@ -1094,7 +1099,6 @@ static void partitioner_execute(void)
 	disk = hashmapGetPrintf(ictx.opts, NULL,
 				BASE_INSTALL_DISK);
 	device = xasprintf("/dev/block/%s", disk);
-	xread_gpt(device, &gpt);
 	dualboot = xatol(hashmapGetPrintf(ictx.opts, "0",
 				"base:dualboot"));
 	/* Confirms that there is indeed a Windows data partition
@@ -1103,11 +1107,12 @@ static void partitioner_execute(void)
 				"disk.%s:msdata_index", disk));
 	set_install_id();
 	if (win_index && dualboot) {
-		execute_dual_boot(win_index, disk, partlist, &gpt);
+		execute_dual_boot(win_index, disk, partlist, device);
 	} else {
-		execute_wipe_disk(partlist, &gpt);
+		execute_wipe_disk(partlist, device);
 	}
 
+	xread_gpt(device, &gpt);
 	dump_header(&gpt);
 	dump_pentries(&gpt);
 
