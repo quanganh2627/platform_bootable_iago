@@ -18,7 +18,6 @@
 #define _BSD_SOURCE
 
 #include <ctype.h>
-#include <endian.h>
 #include <stdint.h>
 #include <limits.h>
 #include <sys/types.h>
@@ -29,116 +28,15 @@
 #include <linux/fs.h>
 
 #include <cutils/properties.h>
+#include <gpt/gpt.h>
 
 #include <iago.h>
 #include <iago_util.h>
 
 #include "iago_private.h"
 
-#define PARTED "/installmedia/images/parted --machine --script --align optimal"
-
-struct guid {
-	uint32_t data1;
-	uint16_t data2;
-	uint16_t data3;
-	uint8_t data4[8]; /* Does not get byte-swapped */
-} __attribute__((__packed__));
-
 #define NAME_MAGIC	"ANDROID!"
-
 #define MIN_DATA_PART_SIZE	350 /* CDD section 7.6.1 */
-
-#define getbyte(x, s)		(((x) >> (8 * (s))) & 0xFF)
-
-/* Lets you define guids exactly as written out little endian */
-#define GPT_GUID(a, b, c, d1, d2) \
-	((struct guid) \
-	 { htole32(a), htole16(b), htole16(c), \
-	    { getbyte(d1, 1), getbyte(d1, 0), getbyte(d2, 5), getbyte(d2, 4), \
-	       getbyte(d2, 3), getbyte(d2, 2), getbyte(d2, 1), getbyte(d2, 0) } } )
-
-#define partition_for_each(gpt, i, e) \
-	for ((i) = 1, (e) = get_entry((i), (gpt)); \
-			i <= letoh32((gpt)->header.num_pentries); \
-			e = get_entry(++(i), (gpt))) if (!(e)->first_lba) continue; else
-
-/* All fields must have little-endian byte ordering! */
-struct gpt_header {
-	char sig[8];
-	uint32_t revision;
-	uint32_t header_size;
-	uint32_t crc32;
-	uint32_t reserved_zero;
-	uint64_t current_lba;
-	uint64_t backup_lba;
-	uint64_t first_usable_lba;
-	uint64_t last_usable_lba;
-	struct guid disk_guid;
-	uint64_t pentry_start_lba;
-	uint32_t num_pentries;
-	uint32_t pentry_size;
-	uint32_t pentry_crc32;
-} __attribute__((__packed__));
-
-struct gpt_entry {
-	struct guid type_guid;
-	struct guid part_guid;
-	uint64_t first_lba;
-	uint64_t last_lba;
-	uint64_t flags;
-	uint16_t name[36]; /* UTF-16LE */
-} __attribute__((__packed__));
-
-struct gpt {
-	struct gpt_header header;
-	unsigned char *entries;
-	int lba_size;
-	char *device;
-};
-
-static struct guid efi_sys_ptn = GPT_GUID(0xC12A7328, 0xF81F, 0x11D2,
-		0xBA4B,	0x00A0C93EC93BULL);
-
-static struct guid ms_reserved_ptn = GPT_GUID(0xE3C9E316, 0x0B5C, 0x4DB8,
-		0x817D, 0xF92DF00215AEULL);
-
-static struct guid ms_data_ptn = GPT_GUID(0xEBD0A0A2, 0xB9E5, 0x4433,
-		0x87C0, 0x68B6B72699C7ULL);
-
-static void sync_ptable(const char *device)
-{
-	int fd;
-	pr_debug("synchonizing partition table for %s", device);
-	sync();
-	fd = xopen(device, O_RDWR);
-	if (ioctl(fd, BLKRRPART, NULL))
-		die_errno("BLKRRPART");
-	xclose(fd);
-}
-
-
-static char *lechar16_to_char8(uint16_t *str16)
-{
-	int i, len = 0;
-	uint16_t *pos;
-	char *ret;
-
-	pos = str16;
-	while (*(pos++))
-		len++;
-
-	ret = xmalloc(len + 1);
-	/* XXX This is NOT how to do utf16le to char * conversion! */
-	for (i = 0; i < len; i++) {
-		uint16_t p = letoh16(str16[i]);
-		if (p > 127)
-			ret[i] = '?';
-		else
-			ret[i] = p;
-	}
-	ret[i] = 0;
-	return ret;
-}
 
 
 static uint64_t round_up_to_multiple(uint64_t val, uint64_t multiple)
@@ -190,6 +88,12 @@ static char *get_install_id(void)
 }
 
 
+static uint64_t mib_to_lba(struct gpt *gpt, uint64_t mib)
+{
+	return (mib << 20) / gpt->lba_size;
+}
+
+
 static void set_install_id(void)
 {
 	int fd;
@@ -209,188 +113,19 @@ static void set_install_id(void)
 }
 
 
-static char *guid_to_string(struct guid *g)
-{
-	/* GUIDS are always printed with little-endian encoding */
-	return xasprintf("%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
-			getbyte(g->data1, 0), getbyte(g->data1, 1),
-			getbyte(g->data1, 2), getbyte(g->data1, 3),
-			getbyte(g->data2, 0), getbyte(g->data2, 1),
-			getbyte(g->data3, 0), getbyte(g->data3, 1),
-			g->data4[0], g->data4[1], g->data4[2], g->data4[3],
-			g->data4[4], g->data4[5], g->data4[6], g->data4[7]);
-}
-
-
-/* Indexes start at 1, to correspond with the disk minor number */
-static struct gpt_entry *get_entry(uint32_t entry_index, struct gpt *gpt)
-{
-	struct gpt_entry *e;
-	if (!entry_index || entry_index > letoh32(gpt->header.num_pentries))
-		return NULL;
-
-	e = (struct gpt_entry *)(gpt->entries + (letoh32(gpt->header.pentry_size) *
-				--entry_index));
-	return e;
-}
-
-
-/* Return the first index in the partition table that doesn't have an
- * actual partition entry. Used to predict the index of a new partition
- * created by parted */
-static uint32_t get_unused_ptn_index(struct gpt *gpt)
-{
-	uint32_t i;
-
-	for (i = 1; i <= letoh32(gpt->header.num_pentries); i++) {
-		struct gpt_entry *e = get_entry(i, gpt);
-		if (!e->first_lba)
-			return i;
-	}
-	die("partition table is full");
-}
-
-
-static uint64_t get_entry_size(unsigned int entry_index, struct gpt *gpt)
-{
-	struct gpt_entry *e = get_entry(entry_index, gpt);
-	if (!e)
-		die("Invalid entry %u", entry_index);
-	return ((letoh64(e->last_lba) + 1) - letoh64(e->first_lba)) * gpt->lba_size;
-}
-
-
-static void dump_pentry(uint32_t index, struct gpt_entry *ent)
-{
-	char *partguidstr, *typeguidstr, *namebuf;
-
-	namebuf = lechar16_to_char8(ent->name);
-	typeguidstr = guid_to_string(&ent->type_guid);
-	partguidstr = guid_to_string(&ent->part_guid);
-
-	pr_debug("[%02d] %s %s %12llu %12llu 0x%016llX %s\n", index, typeguidstr,
-			partguidstr, ent->first_lba, ent->last_lba, ent->flags,
-			namebuf);
-	free(namebuf);
-	free(typeguidstr);
-	free(partguidstr);
-}
-
-
-static void dump_pentries(struct gpt *gpt)
+/* Examine the disk for a partition that has the specified type
+ * GUID. Return the index of the first one found */
+static int check_for_ptn(struct gpt *gpt, const struct guid *guid)
 {
 	uint32_t i;
 	struct gpt_entry *e;
 
-	pr_debug("----------- GPT ENTRIES -------------\n");
 	partition_for_each(gpt, i, e) {
-		dump_pentry(i, e);
+		if (!memcmp(guid, &(e->type_guid), sizeof(struct guid))) {
+			return i;
+		}
 	}
-	pr_debug("-------------------------------------\n");
-}
-
-
-static void dump_header(struct gpt *gpt)
-{
-	char sig[9];
-	struct gpt_header *hdr = &gpt->header;
-	memcpy(sig, hdr->sig, 8);
-	sig[8] = 0;
-	char *disk_guid = guid_to_string(&(hdr->disk_guid));
-	pr_debug("------------ GPT HEADER -------------\n");
-	pr_debug("             sig: %s\n", sig);
-	pr_debug("             rev: 0x%08X\n", letoh32(hdr->revision));
-	pr_debug("        hdr_size: %u\n", letoh32(hdr->header_size));
-	pr_debug("           crc32: 0x%08X\n", letoh32(hdr->crc32));
-	pr_debug("     current_lba: %llu\n", letoh64(hdr->current_lba));
-	pr_debug("      backup_lba: %llu\n", letoh64(hdr->backup_lba));
-	pr_debug("first_usable_lba: %llu\n", letoh64(hdr->first_usable_lba));
-	pr_debug(" last_usable_lba: %llu\n", letoh64(hdr->last_usable_lba));
-	pr_debug("       disk_guid: %s\n", disk_guid);
-	pr_debug("pentry_start_lba: %llu\n", letoh64(hdr->pentry_start_lba));
-	pr_debug("    num_pentries: %u\n", letoh32(hdr->num_pentries));
-	pr_debug("     pentry_size: %u\n", letoh32(hdr->pentry_size));
-	pr_debug("    pentry_crc32: 0x%08X\n", letoh32(hdr->pentry_crc32));
-	pr_debug("-------------------------------------\n");
-}
-
-
-static char *get_device_node(unsigned int gpt_index, struct gpt *gpt)
-{
-	if (isdigit(gpt->device[strlen(gpt->device) - 2]))
-		return xasprintf("%sp%d", gpt->device, gpt_index);
-	else
-		return xasprintf("%s%d", gpt->device, gpt_index);
-}
-
-
-static void close_gpt(struct gpt *gpt)
-{
-	free(gpt->device);
-	free(gpt->entries);
-}
-
-
-/* Read the GPT from the specified device node, filling in the fields
- * in the given struct gpt. Must eventually call close_gpt() on it. */
-static int read_gpt(const char *device, struct gpt *gpt)
-{
-	int fd;
-	size_t entries_size;
-	uint64_t lba_size;
-	uint8_t type;
-
-	lba_size = xatoll(hashmapGetPrintf(ictx.opts, NULL, "disk.%s:lba_size",
-				strrchr(device, '/')+1));
-
-	fd = xopen(device, O_RDONLY);
-
-	xlseek(fd, 0x1be + 0x4, SEEK_SET);
-	xread(fd, &type, sizeof(type));
-	if (type != 0xee) {
-		/* First partition entry in the MBR isn't the protective
-		 * entry. Let's get out of here */
-		pr_debug("Disk %s doesn't seem to have a protective MBR",
-				device);
-		return -1;
-	}
-
-	xlseek(fd, 1 * lba_size, SEEK_SET);
-	xread(fd, &gpt->header, sizeof(struct gpt_header));
-	if (strncmp("EFI PART", gpt->header.sig, 8)) {
-		/* Not a valid GPT. Technically we should also verify
-		 * the checksums and read the backup GPT, but this is
-		 * good enough for now */
-		pr_debug("GPT header sig invalid\n");
-		return -1;
-	}
-	entries_size = letoh32(gpt->header.num_pentries) *
-			letoh32(gpt->header.pentry_size);
-	gpt->entries = xmalloc(entries_size);
-	xlseek(fd, letoh32(gpt->header.pentry_start_lba) * lba_size, SEEK_SET);
-	xread(fd, gpt->entries, entries_size);
-	xclose(fd);
-	gpt->lba_size = lba_size;
-	gpt->device = xstrdup(device);
-	return 0;
-}
-
-
-static void xread_gpt(const char *device, struct gpt *gpt)
-{
-	if (read_gpt(device, gpt))
-		die("Failed to read GPT");
-}
-
-
-/* Re-read the GPT. Usually need to do this after we add or delete partitions
- * in parted */
-static void regen_gpt(struct gpt *gpt)
-{
-	char *device = gpt->device;
-	free(gpt->entries);
-	xread_gpt(device, gpt);
-	free(device);
+	return -1;
 }
 
 
@@ -406,126 +141,21 @@ static uint64_t check_for_android(struct gpt *gpt)
 
 	size = 0;
 	partition_for_each(gpt, i, e) {
-		char *name = lechar16_to_char8(e->name);
+		char *name = gpt_entry_get_name(e);
+		bool c = false;
 		if (strncmp(name, NAME_MAGIC, 8))
-			continue;
+			c = true;
 		if (strlen(name) == 26 && !strcmp(name + 16, "bootloader"))
-			continue; /* skip the ESP */
-		size += get_entry_size(i, gpt);
+			c = true; /* skip the ESP */
+		free(name);
+		if (c)
+			continue;
+		size += gpt_entry_get_size(gpt, e);
 	}
 	return size;
 }
 
 
-/* Examine the disk for a partition that has the specified type
- * GUID. Return the index of the first one found */
-static int check_for_ptn(struct gpt *gpt, struct guid *guid)
-{
-	uint32_t i;
-	struct gpt_entry *e;
-
-	partition_for_each(gpt, i, e) {
-		if (!memcmp(guid, &(e->type_guid), sizeof(struct guid))) {
-			return i;
-		}
-	}
-	return -1;
-}
-
-
-struct ptn_region {
-	uint64_t start;
-	uint64_t end;
-	uint64_t size;
-};
-
-
-/* Comparison function to qsort() struct ptn_regions */
-static int regioncmp(const void *a, const void *b)
-{
-	const struct ptn_region *pa = a;
-	const struct ptn_region *pb = b;
-	int64_t d = pa->start - pb->start;
-	/* Avoid potential overflow by just returning d */
-	if (d < 0)
-		return -1;
-	if (d > 0)
-		return 1;
-	return 0;
-}
-
-
-/* Examine an empty region and determine whether its size exceeds the
- * largest that we have already seen.
- * largest - data structure to update
- * base - beginning LBA of the empty region
- * start - starting LBA of the next partitioned area */
-static void largest_update(struct ptn_region *largest, uint64_t base,
-		uint64_t start)
-{
-	if (start > base) { /* if not, no gap at all */
-		uint64_t size = start - base;
-		if (size > largest->size) {
-			largest->size = size;
-			largest->start = base;
-			largest->end = start - 1;
-		}
-	}
-}
-
-
-/* Return the start and end LBAs of the largest block of unpartitioned
- * space on the disk.
- *
- * returns 0 on success and start_lba, end_lba updated. both values inclusive.
- * returns -1 if there are no free regions at all
- */
-static int find_contiguous_free_space(struct gpt *gpt, uint64_t *start_lba,
-		uint64_t *end_lba)
-{
-	uint32_t ptn_count = 0;
-	uint32_t i, j;
-	uint64_t base;
-	struct gpt_entry *e;
-	struct ptn_region largest;
-	struct ptn_region *regions;
-
-	/* Create an array of all the (start, end) partition entries and sort
-	 * it ascending by starting location */
-	partition_for_each(gpt, i, e)
-		ptn_count++;
-	regions = xcalloc(ptn_count, sizeof(struct ptn_region));
-	j = 0;
-	partition_for_each(gpt, i, e) {
-		regions[j].start = letoh64(e->first_lba);
-		regions[j].end = letoh64(e->last_lba);
-		j++;
-	}
-	qsort(regions, ptn_count, sizeof(struct ptn_region), regioncmp);
-
-	/* Check for gaps, calculate their size, and update largest if
-	 * bigger than already seen */
-	base = letoh64(gpt->header.first_usable_lba);
-	largest.size = 0;
-	largest.end = 0;
-	largest.start = 0;
-	for (i = 0; i < ptn_count; i++) {
-		largest_update(&largest, base, regions[i].start);
-		base = regions[i].end + 1;
-	}
-	free(regions);
-
-	/* Check space after last partition */
-	largest_update(&largest, base, letoh64(gpt->header.last_usable_lba) + 1);
-
-	if (largest.size == 0)
-		return -1;
-	*start_lba = largest.start;
-	*end_lba = largest.end;
-	pr_debug("find_contiguous_free_space: LBA %llu --> %llu (inclusive)",
-			largest.start, largest.end);
-	return 0;
-}
 
 
 /* Examine the partition entry at the specified index to see if
@@ -549,11 +179,13 @@ static int64_t get_ntfs_min_size(int index, struct gpt *gpt)
 
 	static const char *needle = "You might resize at ";
 
-	e = get_entry(index, gpt);
-	if (memcmp(&e->type_guid, &ms_data_ptn, sizeof(struct guid)))
+	e = gpt_entry_get(index, gpt);
+	if (guidcmp(&e->type_guid, get_guid_type(PART_MS_DATA)))
 		return -EINVAL;
 
-	device = get_device_node(index, gpt);
+	device = gpt_get_device_node(index, gpt);
+	if (!device)
+		die("gpt_get_device_node");
 	ret = execute_command("ntfsresize --check %s", device);
 	if (ret) {
 		free(device);
@@ -585,16 +217,15 @@ static void resize_ntfs_partition(int index, struct gpt *gpt, uint64_t new_size)
 {
 	struct gpt_entry *e;
 	int ret;
-	uint64_t start_lba, end_lba;
 	char *device;
 
 	/* Assumes all checks in get_ntfs_min_size_mb have been done */
-	e = get_entry(index, gpt);
-	start_lba = letoh32(e->first_lba);
-	end_lba = start_lba + to_unit_ceiling(new_size, gpt->lba_size);
+	e = gpt_entry_get(index, gpt);
 
 	/* Resize the NTFS filesystem */
-	device = get_device_node(index, gpt);
+	device = gpt_get_device_node(index, gpt);
+	if (!device)
+		die("gpt_get_device_node");
 	ret = execute_command("ntfsresize --no-action --size %lld %s", new_size, device);
 	if (ret)
 		die("ntfs resize operation dry run failed");
@@ -604,16 +235,8 @@ static void resize_ntfs_partition(int index, struct gpt *gpt, uint64_t new_size)
 		die("ntfs resize operation failed. disk is likely corrupted!!");
 	free(device);
 
-	/* Now resize the underlying partition by deleting it and recreating */
-	ret = execute_command(PARTED " %s rm %d", gpt->device, index);
-	if (ret)
-		die("Couldn't remove old NTFS partition entry");
-	/* end_lba is inclusive in parted when specifying with sectors */
-	ret = execute_command(PARTED " %s mkpart msdata ntfs %llds %llds",
-			gpt->device, start_lba, end_lba - 1);
-	if (ret)
-		die("Couldn't create resized NTFS partition");
-	regen_gpt(gpt);
+	/* Now resize the underlying partition */
+	e->last_lba = e->first_lba + to_unit_ceiling(new_size, gpt->lba_size) - 1;
 }
 
 
@@ -623,21 +246,24 @@ static void delete_android(struct gpt *gpt)
 	uint32_t i;
 
 	partition_for_each(gpt, i, e) {
-		int ret;
 		char *name;
+		bool c = false;
 
-		name = lechar16_to_char8(e->name);
+		name = gpt_entry_get_name(e);
+		if (!name)
+			die("gpt_entry_get_name");
 
 		if (strncmp(name, NAME_MAGIC, 8))
-			continue;
+			c = true;
 		if (strlen(name) == 26 && !strcmp(name + 16, "bootloader"))
+			c = true;
+		free(name);
+		if (c)
 			continue;
 
-		ret = execute_command(PARTED " %s rm %d", gpt->device, i);
-		if (ret)
+		if (gpt_entry_delete(gpt, i))
 			die("Couldn't delete partition");
 	}
-	regen_gpt(gpt);
 }
 
 
@@ -658,7 +284,7 @@ static void partitioner_prepare(void)
 		uint64_t sectors, lba_size;
 		uint64_t android_size;
 		uint64_t free_start_lba, free_end_lba;
-		struct gpt gpt;
+		struct gpt *gpt;
 		char *device;
 		int ptn_index;
 
@@ -688,17 +314,21 @@ static void partitioner_prepare(void)
 				device);
 		string_list_append(&disks, dp->d_name);
 
-		if (read_gpt(hashmapGetPrintf(ictx.opts, NULL, "disk.%s:device", dp->d_name),
-					&gpt))
+		gpt = gpt_init(device);
+		if (!gpt)
+			die("gpt allocation");
+		if (gpt_read(gpt)) {
+			gpt_close(gpt);
 			continue;
+		}
 
-		ptn_index = check_for_ptn(&gpt, &ms_reserved_ptn);
+		ptn_index = check_for_ptn(gpt, get_guid_type(PART_MS_RESERVED));
 		if (ptn_index >= 0) {
 			/* User data NTFS partition always right after
 			 * the ms reserved partition */
 			uint64_t ret, size;
 			int ms_data_idx = ptn_index + 1;
-			size = get_entry_size(ms_data_idx, &gpt);
+			size = gpt_entry_get_size(gpt, gpt_entry_get(ms_data_idx, gpt));
 			pr_info("Disk %s has an existing Windows installation",
 					dp->d_name);
 			pr_debug("%s: Found Windows data at partition index %d of size %llu MiB\n",
@@ -709,7 +339,7 @@ static void partitioner_prepare(void)
 			xhashmapPut(ictx.opts,
 					xasprintf("disk.%s:msdata_size", dp->d_name),
 					xasprintf("%llu", size));
-			ret = get_ntfs_min_size(ms_data_idx, &gpt);
+			ret = get_ntfs_min_size(ms_data_idx, gpt);
 			switch (ret) {
 			case -EINVAL:
 			case -EIO:
@@ -731,7 +361,7 @@ static void partitioner_prepare(void)
 		} else
 			pr_debug("%s: No Windows installation found\n", dp->d_name);
 
-		ptn_index = check_for_ptn(&gpt, &efi_sys_ptn);
+		ptn_index = check_for_ptn(gpt, get_guid_type(PART_ESP));
 		if (ptn_index >= 0) {
 			/* We found an EFI system partition and may
 			 * re-use it */
@@ -742,11 +372,12 @@ static void partitioner_prepare(void)
 				xasprintf("%d", ptn_index));
 			xhashmapPut(ictx.opts,
 				xasprintf("disk.%s:esp_size", dp->d_name),
-				xasprintf("%llu", mib_align(get_entry_size(ptn_index, &gpt))));
+				xasprintf("%llu", mib_align(gpt_entry_get_size(
+							gpt, gpt_entry_get(ptn_index, gpt)))));
 		} else
 			pr_debug("%s: no EFI System Partition found\n",
 					dp->d_name);
-		android_size = check_for_android(&gpt);
+		android_size = check_for_android(gpt);
 		if (android_size) {
 			pr_info("Disk %s has an existing Android installation",
 					dp->d_name);
@@ -754,10 +385,11 @@ static void partitioner_prepare(void)
 				xasprintf("disk.%s:android_size", dp->d_name),
 				xasprintf("%llu", android_size));
 		}
-		if (!find_contiguous_free_space(&gpt, &free_start_lba, &free_end_lba)) {
+		if (!gpt_find_contiguous_free_space(gpt, &free_start_lba, &free_end_lba)) {
 			xhashmapPut(ictx.opts,
 				xasprintf("disk.%s:free_size", dp->d_name),
-				xasprintf("%llu", ((free_end_lba + 1) - free_start_lba) * gpt.lba_size));
+				xasprintf("%llu", ((free_end_lba + 1) - free_start_lba)
+					* gpt->lba_size));
 			xhashmapPut(ictx.opts,
 				xasprintf("disk.%s:free_start_lba", dp->d_name),
 				xasprintf("%llu", free_start_lba));
@@ -765,6 +397,7 @@ static void partitioner_prepare(void)
 				xasprintf("disk.%s:free_end_lba", dp->d_name),
 				xasprintf("%llu", free_end_lba));
 		}
+		gpt_close(gpt);
 	}
 	closedir(dir);
 	xhashmapPut(ictx.opts, xasprintf(BASE_DISK_LIST), disks);
@@ -892,7 +525,7 @@ static void partitioner_cli(void)
 			 * additional free space on the disk. Reasonable given
 			 * how /data is expanded. We should still add an
 			 * advanced partitioning option which drops into
-			 * an internactive parted session */
+			 * an internactive partition editing session */
 			if (android_size)
 				total_free_size = android_size;
 			else
@@ -940,7 +573,7 @@ static void partitioner_cli(void)
 	disk_size -= (2 * 1024 * 1024);
 	if (disk_size < required_size)
 		die("Insuffcient disk size (%lld MiB available) to install Android (need %lld MiB)",
-                        to_mib_floor(disk_size), to_mib(required_size));
+			to_mib_floor(disk_size), to_mib(required_size));
 }
 
 
@@ -955,15 +588,11 @@ static char *gpt_name(const char *name)
 }
 
 
-struct flags_ctx {
-	int index;
-	const char *device;
-};
-
 
 static bool flags_cb(char *flag, int _unused index, void *context)
 {
-	struct flags_ctx *fc = context;
+	uint64_t *flags_ptr = context;
+	uint64_t mask;
 	bool enable;
 
 	if (flag[0] == '!') {
@@ -973,11 +602,42 @@ static bool flags_cb(char *flag, int _unused index, void *context)
 		enable = true;
 	}
 
-	if (execute_command(PARTED " %s set %d %s %s", fc->device,
-				fc->index, flag, enable ? "on" : "off")) {
-		die("Unable to set partition %d flag %s", fc->index, flag);
-	}
+	if (!strcmp(flag, "system"))
+		mask = GPT_FLAG_SYSTEM;
+	else if (!strcmp(flag, "boot"))
+		mask = GPT_FLAG_BOOTABLE;
+	else if (!strcmp(flag, "ro"))
+		mask = GPT_FLAG_READONLY;
+	else if (!strcmp(flag, "hidden"))
+		mask = GPT_FLAG_HIDDEN;
+	else if (!strcmp(flag, "noauto"))
+		mask = GPT_FLAG_NO_AUTOMOUNT;
+	else
+		die("unknown partition flag '%s'", flag);
+
+	if (enable)
+		*flags_ptr |= mask;
+	else
+		*flags_ptr &= ~mask;
+
 	return true;
+}
+
+
+static enum part_type string_to_type(char *type)
+{
+	if (!strcmp(type, "esp"))
+		return PART_ESP;
+	else if (!strcmp(type, "boot"))
+		return PART_ANDROID_BOOT;
+	else if (!strcmp(type, "misc"))
+		return PART_ANDROID_MISC;
+	else if (!strcmp(type, "ext4"))
+		return PART_LINUX;
+	else if (!strcmp(type, "vfat")) {
+		return PART_MS_DATA;
+	} else
+		die("Unknown partition type %s", type);
 }
 
 
@@ -1004,19 +664,19 @@ struct mkpart_ctx {
 static bool mkpart_cb(char *entry, int index _unused, void *context)
 {
 	struct mkpart_ctx *mc = context;
-	struct flags_ctx fc;
-	char *flags;
+	char *flags_list;
+	char *ptype;
 	char *name;
 	int64_t part_mb;
+	uint64_t flags;
 
 	if (mc->skip_bootloader && !strcmp(entry, "bootloader"))
 		return true;
 
-	/* Android port of parted has some issue with specifying
-	 * partition name along with mkpart. This prevents us from
-	 * looking up the index by name, but we know that parted
-	 * uses the next unused GPT entry in the entries array */
-	mc->ptn_index = get_unused_ptn_index(mc->gpt);
+	flags_list = hashmapGetPrintf(ictx.opts, "", "partition.%s:flags", entry);
+	ptype = hashmapGetPrintf(ictx.opts, "ext4", "partition.%s:type", entry);
+	flags = 0;
+	string_list_iterate(flags_list, flags_cb, &flags);
 
 	if (strlen(entry) > 27)
 		die("Partition '%s' name too long!", entry);
@@ -1027,23 +687,16 @@ static bool mkpart_cb(char *entry, int index _unused, void *context)
 		part_mb = mc->disk_mb - mc->ptn_mb;
 
 	name = gpt_name(entry);
-	if (execute_command(PARTED " %s mkpart %s ext4 %lldMiB %lldMiB",
-			mc->gpt->device, name, mc->next_mb,
-			mc->next_mb + part_mb))
-		die("Parted failure creating new partition\n");
 
-	/* wish I knew why we had to do this, whatever */
-	if (execute_command(PARTED " %s name %d %s",
-				mc->gpt->device, mc->ptn_index, name))
-		die("Parted failure setting partition name to '%s'", name);
+	mc->ptn_index = gpt_entry_create(mc->gpt, name, string_to_type(ptype),
+			flags, mib_to_lba(mc->gpt, mc->next_mb),
+			mib_to_lba(mc->gpt, mc->next_mb + part_mb) - 1);
+	if (mc->ptn_index == 0)
+		die("failure creating new partition\n");
 
 	free(name);
-	regen_gpt(mc->gpt);
 	mc->next_mb += part_mb;
-	flags = hashmapGetPrintf(ictx.opts, "", "partition.%s:flags", entry);
-	fc.index = mc->ptn_index;
-	fc.device = mc->gpt->device;
-	string_list_iterate(flags, flags_cb, &fc);
+
 	xhashmapPut(ictx.opts, xasprintf("partition.%s:index", entry),
 			xasprintf("%d", mc->ptn_index));
 	xhashmapPut(ictx.opts, xasprintf("partition.%s:device", entry),
@@ -1062,7 +715,7 @@ static void create_android_partitions(uint64_t bootloader_size, char *partlist,
 
 	space_needed_mb = to_mib(get_partial_space_required(bootloader_size));
 
-	if (find_contiguous_free_space(gpt, &start_lba, &end_lba))
+	if (gpt_find_contiguous_free_space(gpt, &start_lba, &end_lba))
 		die("Couldn't calculate unpartitioned disk space");
 
 	start_mb = to_mib(start_lba * gpt->lba_size);
@@ -1085,7 +738,6 @@ static void create_android_partitions(uint64_t bootloader_size, char *partlist,
 	mc.skip_bootloader = skip_bootloader;
 	mc.ptn_mb = space_needed_mb;
 	mc.gpt = gpt;
-	dump_header(gpt);
 
 	pr_debug("offset=%llu space_available=%llu space_needed=%llu",
 			mc.next_mb, mc.disk_mb, mc.ptn_mb);
@@ -1093,12 +745,17 @@ static void create_android_partitions(uint64_t bootloader_size, char *partlist,
 }
 
 
-static void execute_dual_boot(char *disk, char *partlist, char *device)
+struct gpt *execute_dual_boot(char *disk, char *partlist, char *device)
 {
 	uint64_t esp_size, win_resize;
 	uint32_t esp_index, win_index;
 	char *name;
-	struct gpt gpt;
+	struct gpt *gpt;
+	struct gpt_entry *esp;
+
+	gpt = gpt_init(device);
+	if (!gpt)
+		die("gpt_init");
 
 	win_resize = xatoll(hashmapGetPrintf(ictx.opts, "0",
 				"disk.%s:windows_resize", disk));
@@ -1114,17 +771,18 @@ static void execute_dual_boot(char *disk, char *partlist, char *device)
 		die("Please use the interactive installer to re-partition the disk.");
 	}
 
-	xread_gpt(device, &gpt);
+	if (gpt_read(gpt))
+		die("Couldn't read existing GPT.");
 
 	if (win_resize) {
 		pr_info("Resizing Windows partition");
-		resize_ntfs_partition(win_index, &gpt, win_resize);
+		resize_ntfs_partition(win_index, gpt, win_resize);
 	}
 
 	if (xatoll(hashmapGetPrintf(ictx.opts, "0",
 				"disk.%s:android_size", disk))) {
 		pr_info("Deleting existing Android installation");
-		delete_android(&gpt);
+		delete_android(gpt);
 	}
 
 	/* Claim existing ESP as our own bootloader partition */
@@ -1136,29 +794,33 @@ static void execute_dual_boot(char *disk, char *partlist, char *device)
 			xasprintf("%u", esp_index));
 	xhashmapPut(ictx.opts, xstrdup("partition.bootloader:device"),
 			xstrdup("/dev/block/by-name/bootloader"));
-	create_android_partitions(esp_size, partlist, &gpt, true);
+	create_android_partitions(esp_size, partlist, gpt, true);
 	name = gpt_name("bootloader");
-	if (execute_command(PARTED " %s name %d %s",
-				gpt.device, esp_index, name))
-		die("Parted failure setting partition name to '%s'", name);
+	esp = gpt_entry_get(esp_index, gpt);
+	if (!esp)
+		die("couldn't reference ESP");
+	if (gpt_entry_set_name(esp, name))
+		die("failure setting partition name to '%s'", name);
 	free(name);
-	close_gpt(&gpt);
+	return gpt;
 }
 
 
-static void execute_wipe_disk(char *partlist, char *device)
+struct gpt *execute_wipe_disk(char *partlist, char *device)
 {
 	uint64_t bootloader_size;
-	struct gpt gpt;
+	struct gpt *gpt;
 
-	pr_debug("Creating new partition table for %s", device);
-	if (execute_command(PARTED " %s mklabel gpt", device))
-		die("Parted failure!\n");
-	xread_gpt(device, &gpt);
+	gpt = gpt_init(device);
+	if (!gpt)
+		die("gpt_init");
+	if (gpt_new(gpt))
+		die("coudln't create new GPT");
+
 	bootloader_size = (xatoll(hashmapGetPrintf(ictx.opts, NULL,
 				"partition.bootloader:len")) << 20) * 2;
-	create_android_partitions(bootloader_size, partlist, &gpt, false);
-	close_gpt(&gpt);
+	create_android_partitions(bootloader_size, partlist, gpt, false);
+	return gpt;
 }
 
 
@@ -1167,8 +829,10 @@ static bool getguid_cb(char *entry, int list_index _unused, void *context)
 	struct gpt *gpt = context;
 	int index = xatol(hashmapGetPrintf(ictx.opts, NULL,
 			"partition.%s:index", entry));
-	struct gpt_entry *e = get_entry(index, gpt);
-	char *guid = guid_to_string(&(e->part_guid));
+	struct gpt_entry *e = gpt_entry_get(index, gpt);
+	char *guid = gpt_guid_to_string(&(e->part_guid));
+	if (!guid)
+		die("gpt_guid_to_string");
 	xhashmapPut(ictx.opts, xasprintf("partition.%s:guid", entry), guid);
 	return true;
 }
@@ -1176,9 +840,9 @@ static bool getguid_cb(char *entry, int list_index _unused, void *context)
 
 static void partitioner_execute(void)
 {
-	char *disk, *device, *partlist;
+	char *disk, *device, *partlist, *buf;
 	bool dualboot;
-	struct gpt gpt;
+	struct gpt *gpt;
 
 	partlist = hashmapGetPrintf(ictx.opts, NULL, BASE_PTN_LIST);
 	disk = hashmapGetPrintf(ictx.opts, NULL,
@@ -1188,19 +852,28 @@ static void partitioner_execute(void)
 				"base:dualboot"));
 	set_install_id();
 	if (dualboot) {
-		execute_dual_boot(disk, partlist, device);
+		gpt = execute_dual_boot(disk, partlist, device);
 	} else {
-		execute_wipe_disk(partlist, device);
+		gpt = execute_wipe_disk(partlist, device);
 	}
 
-	xread_gpt(device, &gpt);
-	dump_header(&gpt);
-	dump_pentries(&gpt);
+	buf = gpt_dump_header(gpt);
+	if (buf) {
+		pr_debug("%s", buf);
+		free(buf);
+	}
+	buf = gpt_dump_pentries(gpt);
+	if (buf) {
+		pr_debug("%s", buf);
+		free(buf);
+	}
 
 	/* Set all the partition.XX:guid entries */
-	string_list_iterate(partlist, getguid_cb, &gpt);
-	close_gpt(&gpt);
-	sync_ptable(device);
+	string_list_iterate(partlist, getguid_cb, gpt);
+	if (gpt_write(gpt))
+		die("Couldn't write GPT");
+	gpt_close(gpt);
+	gpt_sync_ptable(device);
 	free(device);
 	pr_debug("Partitioner execution phase complete");
 }

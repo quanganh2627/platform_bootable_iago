@@ -21,6 +21,7 @@ LOCAL_SHARED_LIBRARIES := libcutils \
 			  liblog \
 			  libext4_utils \
 			  libz \
+			  libgpt \
 
 LOCAL_STATIC_LIBRARIES := libiniparser \
 			  $(plugin_lib_names) \

@@ -21,7 +21,6 @@ endef
 IAGO_IMAGES_DEPS := \
 	$(INSTALLED_BOOTIMAGE_TARGET) \
 	$(INSTALLED_RECOVERYIMAGE_TARGET) \
-	$(PRODUCT_OUT)/parted/parted \
 	$(iago_base)/iagod \
 
 ifeq ($(TARGET_USERIMAGES_SPARSE_EXT_DISABLED),false)
@@ -117,11 +116,11 @@ gummiboot_efi_name := bootx64.efi
 endif
 
 iago_gummiboot_files := \
-	$(iago_base)/live.conf \
-        $(iago_base)/install.conf \
-	$(iago_base)/interactive.conf \
+	$(iago_base)/0live.conf \
+        $(iago_base)/1install.conf \
+	$(iago_base)/2interactive.conf \
 
-$(iago_base)/%.conf: $(LOCAL_PATH)/%.conf.in
+$(iago_base)/%.conf: $(LOCAL_PATH)/loader/%.conf.in
 	$(hide) mkdir -p $(iago_base)
 	$(hide) sed "s|CMDLINE|$(BOARD_KERNEL_CMDLINE)|" $^ > $@
 
@@ -135,7 +134,7 @@ $(iago_fs_img): \
 		$(INSTALLED_KERNEL_TARGET) \
 		$(LOCAL_PATH)/make_vfatfs \
 		$(GUMMIBOOT_EFI) \
-		$(LOCAL_PATH)/loader.conf \
+		$(LOCAL_PATH)/loader/loader.conf \
 		| $(ACP) \
 
 	$(hide) rm -rf $(iago_rootfs)
@@ -148,7 +147,7 @@ $(iago_fs_img): \
 	$(hide) mkdir -p $(iago_efi_dir)
 	$(hide) mkdir -p $(iago_efi_loader)/entries
 	$(hide) $(ACP) $(GUMMIBOOT_EFI) $(iago_efi_dir)/$(gummiboot_efi_name)
-	$(hide) $(ACP) $(LOCAL_PATH)/loader.conf $(iago_efi_loader)/loader.conf
+	$(hide) $(ACP) $(LOCAL_PATH)/loader/loader.conf $(iago_efi_loader)/loader.conf
 	$(hide) $(ACP) -f $(iago_gummiboot_files) $(iago_efi_loader)/entries/
 	$(hide) $(LOCAL_PATH)/make_vfatfs $(iago_rootfs) $@
 

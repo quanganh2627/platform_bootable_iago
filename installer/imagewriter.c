@@ -57,7 +57,7 @@ static bool execute_cb(char *entry, int index _unused, void *context _unused)
 			        pr_error("make_ext4fs failed\n");
 				die();
 			}
-		} else if (!strcmp(type, "vfat")) {
+		} else if (!strcmp(type, "vfat") || !strcmp(type, "esp")) {
 			int rv;
 			rv = execute_command(MKDOSFS_BIN " -L %s %s", entry,
 					device);
@@ -84,11 +84,6 @@ static bool execute_cb(char *entry, int index _unused, void *context _unused)
 			ext4_filesystem_checks(device, footer);
 		} else if (!strcmp(type, "vfat")) {
 			vfat_filesystem_checks(device);
-		} else if (!strcmp(type, "raw")) {
-			/* Nothing to do */
-		} else {
-			pr_error("unsupported fs type '%s'\n", type);
-			die();
 		}
 	} else if (!strcmp(mode, "zero")) {
 		int fd;
