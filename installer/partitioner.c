@@ -1100,7 +1100,6 @@ static void execute_dual_boot(char *disk, char *partlist, char *device)
 	char *name;
 	struct gpt gpt;
 
-	xread_gpt(device, &gpt);
 	win_resize = xatoll(hashmapGetPrintf(ictx.opts, "0",
 				"disk.%s:windows_resize", disk));
 	esp_size = xatoll(hashmapGetPrintf(ictx.opts, "0",
@@ -1111,9 +1110,11 @@ static void execute_dual_boot(char *disk, char *partlist, char *device)
 				"disk.%s:msdata_index", disk));
 
 	if (!esp_index) {
-		pr_info("Dual boot selected, but no existing EFI system partition found.");
-		die("Please use the interactive installer to wipe the disk; you cannot dual boot.");
+		pr_info("Existing EFI system partition not found.");
+		die("Please use the interactive installer to re-partition the disk.");
 	}
+
+	xread_gpt(device, &gpt);
 
 	if (win_resize) {
 		pr_info("Resizing Windows partition");
