@@ -26,8 +26,11 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <regex.h>
 
 #include <cutils/klog.h>
+
+#include <iago.h>
 
 #define INSTALL_MOUNT   "/installmedia"
 #define TMP_NODE        "/dev/__iago_blkdev"
@@ -188,7 +191,7 @@ int is_install_media(char *name)
 
     /* It mounted - check for cookie */
     if (stat(INSTALL_MOUNT "/iago-cookie", &statbuf)) {
-        dbg_perror("stat");
+        dbg_perror("stat iago cookie");
         umount(INSTALL_MOUNT);
     } else {
         dbg("'%s' is Iago media\n", pathbuf);
@@ -210,6 +213,12 @@ int mount_device(void)
     char path[PATH_MAX];
     char *name = NULL;
     int fd;
+    regex_t diskreg;
+
+    if (regcomp(&diskreg, DISK_MATCH_REGEX, REG_EXTENDED | REG_NOSUB)) {
+        dbg_perror("regcomp");
+        goto out;
+    }
 
     dir = opendir("/sys/block");
     if (!dir) {
@@ -221,11 +230,9 @@ int mount_device(void)
         if (!dp)
             goto out;
         name = dp->d_name;
-        if (!strncmp(name, ".", 1) ||
-                !strncmp(name, "ram", 3) ||
-                !strncmp(name, "loop", 4)) {
+
+        if (!regexec(&diskreg, name, 0, NULL, 0))
             continue;
-        }
 
         snprintf(path, sizeof(path), "/sys/block/%s/", name);
         if (is_install_media(path))
@@ -239,6 +246,8 @@ int mount_device(void)
             struct dirent *dp2 = readdir(dir2);
             if (!dp2)
                 break;
+            if (!regexec(&diskreg, dp2->d_name, 0, NULL, 0))
+                continue;
             if (strncmp(dp2->d_name, name, strlen(name)))
                 continue;
             snprintf(path, sizeof(path), "/sys/block/%s/%s/",

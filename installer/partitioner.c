@@ -26,6 +26,7 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <linux/fs.h>
+#include <regex.h>
 
 #include <cutils/properties.h>
 #include <gpt/gpt.h>
@@ -273,11 +274,16 @@ static void partitioner_prepare(void)
 	DIR *dir = NULL;
 	char *disks = xstrdup("");
 	char media[PROPERTY_VALUE_MAX];
+	regex_t diskreg;
+
 	property_get("ro.iago.media", media, "");
 
 	dir = opendir("/sys/block");
 	if (!dir)
 		die();
+
+	if (regcomp(&diskreg, DISK_MATCH_REGEX, REG_EXTENDED | REG_NOSUB))
+		die_errno("regcomp");
 
 	while (1) {
 		struct dirent *dp = readdir(dir);
@@ -287,13 +293,15 @@ static void partitioner_prepare(void)
 		struct gpt *gpt;
 		char *device;
 		int ptn_index;
+		char *diskname_node;
+		struct stat sb;
 
 		if (!dp)
 			break;
-		if (!strncmp(dp->d_name, ".", 1) ||
-				!strncmp(dp->d_name, "ram", 3) ||
-				!strncmp(dp->d_name, "loop", 4))
+
+		if (!regexec(&diskreg, dp->d_name, 0, NULL, 0))
 			continue;
+
 		if (!strcmp(dp->d_name, media))
 			continue;
 
@@ -306,10 +314,16 @@ static void partitioner_prepare(void)
 				xasprintf("%llu", sectors));
 		xhashmapPut(ictx.opts, xasprintf("disk.%s:lba_size", dp->d_name),
 				xasprintf("%llu", lba_size));
+		diskname_node = xasprintf("/sys/block/%s/device/model", dp->d_name);
+		if (stat(diskname_node, &sb)) {
+			free(diskname_node);
+			diskname_node = xasprintf("/sys/block/%s/device/name", dp->d_name);
+		}
 		xhashmapPut(ictx.opts, xasprintf("disk.%s:size", dp->d_name),
 				xasprintf("%llu", lba_size * sectors));
 		xhashmapPut(ictx.opts, xasprintf("disk.%s:model", dp->d_name),
-				read_sysfs("/sys/block/%s/device/model", dp->d_name));
+				read_sysfs("%s", diskname_node));
+		free(diskname_node);
 		xhashmapPut(ictx.opts, xasprintf("disk.%s:device", dp->d_name),
 				device);
 		string_list_append(&disks, dp->d_name);
