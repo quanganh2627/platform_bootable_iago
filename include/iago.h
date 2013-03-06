@@ -27,14 +27,8 @@ struct iago_context {
 	Hashmap *opts;
 
 	/* Key/value pairs here will be turned into install.prop
-	   at the end of installation */
+	 * at the end of installation */
 	Hashmap *iprops;
-
-	/* Key/value pairs here will be added to the kernel command
-	 * line in the form key=value. Don't put spaces in the value!!
-         * This is used by bootloader and partitioning plugins.
-         * Other plugins should not read or write to this */
-	Hashmap *cmdline;
 
 	/* Linked list of plug-in modules */
 	struct listnode plugins;
@@ -114,5 +108,8 @@ void add_iago_plugin(struct iago_plugin *p);
 
 /* Partitions to include in fs_mgr fstab */
 #define BASE_FSMGR_PTNS		"base:fsmgr_partitions"
+
+/* Installation ID, used by Android to look up partitions in the GPT */
+#define INSTALL_ID		"base:install_id"
 
 #endif

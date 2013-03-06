@@ -50,16 +50,6 @@ static void write_install_props(void)
 }
 
 
-static bool cmdline_cb(void *k, void *v, void _unused *context)
-{
-	char *key = k;
-	char *value = v;
-
-	pr_info("%s=%s", key, value);
-	return true;
-}
-
-
 static void finalizer_execute(void)
 {
 	char *device, *type;
@@ -73,8 +63,8 @@ static void finalizer_execute(void)
 	umount("/mnt/install");
 
 	/* Just for info */
-	pr_info("Required kernel command line options for the bootloader:");
-	hashmapForEach(ictx.cmdline, cmdline_cb, NULL);
+	pr_info("androidboot.install_id=%s", hashmapGetPrintf(ictx.opts,
+				NULL, INSTALL_ID));
 }
 
 

@@ -37,9 +37,8 @@ static void init_iago_context(void)
 {
 	ictx.opts = hashmapCreate(50, str_hash, str_equals);
 	ictx.iprops = hashmapCreate(50, str_hash, str_equals);
-	ictx.cmdline = hashmapCreate(50, str_hash, str_equals);
 
-	if (!ictx.opts || !ictx.iprops || !ictx.cmdline)
+	if (!ictx.opts || !ictx.iprops)
 		die_errno("malloc");
 
 	list_init(&ictx.plugins);

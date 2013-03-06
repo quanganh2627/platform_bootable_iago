@@ -109,7 +109,7 @@ static void set_install_id(void)
 		if (property_set("ro.boot.install_id", install_id_str))
 			die("Unable to set ro.boot.install_id");
 	}
-	xhashmapPut(ictx.cmdline, xstrdup("androidboot.install_id"),
+	xhashmapPut(ictx.opts, xstrdup(INSTALL_ID),
 			install_id_str);
 }
 

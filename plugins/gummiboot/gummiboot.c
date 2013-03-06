@@ -63,38 +63,23 @@ static void gummiboot_prepare(void)
 }
 
 
-static bool cmdline_cb(void *k, void *v, void *context)
-{
-	int fd = (int)context;
-	char *key = k;
-	char *value = v;
-
-	put_string(fd, " %s=%s", key, value);
-	return true;
-}
-
-
 static bool bootimage_cb(char *entry, int index _unused, void *context _unused)
 {
 	int fd;
 	char *filename;
-	char *description, *prefix, *guid;
+	char *description, *prefix, *guid, *install_id;
 
 	filename = xasprintf(BOOTLOADER_PATH "/loader/entries/%s.conf", entry);
-	fd = xopen(filename, O_WRONLY | O_CREAT);
+	fd = xopen(filename, O_WRONLY | O_CREAT | O_TRUNC);
 	free(filename);
 	prefix = xasprintf("partition.%s", entry);
-
+	install_id = hashmapGetPrintf(ictx.opts, NULL, INSTALL_ID) + 8;
 	description = hashmapGetPrintf(ictx.opts, NULL,
 			"%s:description", prefix);
 	put_string(fd, "title %s\n", description);
 	guid = hashmapGetPrintf(ictx.opts, NULL, "%s:guid", prefix);
 	put_string(fd, "android %s\n", guid);
-	put_string(fd, "options ");
-
-	hashmapForEach(ictx.cmdline, cmdline_cb, (void*)fd);
-
-	put_string(fd, "\n\n");
+	put_string(fd, "install_id %s\n", install_id);
 	xclose(fd);
 	free(prefix);
 	return true;
