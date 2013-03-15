@@ -110,9 +110,9 @@ $(iago_ramdisk): \
 	$(hide) $(MKBOOTFS) $(iago_ramdisk_root) | $(MINIGZIP) > $@
 
 ifeq ($(TARGET_KERNEL_ARCH),i386)
-gummiboot_efi_name := bootia32.efi
+efi_default_name := bootia32.efi
 else
-gummiboot_efi_name := bootx64.efi
+efi_default_name := bootx64.efi
 endif
 
 iago_gummiboot_files := \
@@ -146,7 +146,9 @@ $(iago_fs_img): \
 	$(hide) mkdir -p $(iago_rootfs)/images
 	$(hide) mkdir -p $(iago_efi_dir)
 	$(hide) mkdir -p $(iago_efi_loader)/entries
-	$(hide) $(ACP) $(GUMMIBOOT_EFI) $(iago_efi_dir)/$(gummiboot_efi_name)
+	$(hide) $(ACP) $(GUMMIBOOT_EFI) $(iago_rootfs)
+	$(hide) $(ACP) $(MOKMANAGER_EFI) $(iago_rootfs)
+	$(hide) $(ACP) $(UEFI_SHIM_EFI) $(iago_efi_dir)/$(efi_default_name)
 	$(hide) $(ACP) $(LOCAL_PATH)/loader/loader.conf $(iago_efi_loader)/loader.conf
 	$(hide) $(ACP) -f $(iago_gummiboot_files) $(iago_efi_loader)/entries/
 	$(hide) $(LOCAL_PATH)/make_vfatfs $(iago_rootfs) $@

@@ -135,6 +135,8 @@ static void gummiboot_execute(void)
 	mount_partition_device(device, "vfat", BOOTLOADER_PATH);
 	pr_info("Copying gummiboot support files");
 	copy_file(IMAGES_PATH "/gummiboot.efi", BOOTLOADER_PATH "/gummiboot.efi");
+	copy_file(IMAGES_PATH "/shim.efi", BOOTLOADER_PATH "/shim.efi");
+	copy_file(IMAGES_PATH "/MokManager.efi", BOOTLOADER_PATH "/MokManager.efi");
 
 	nftw(BOOTLOADER_PATH "/loader", delete_cb, 64, FTW_DEPTH | FTW_PHYS);
 	xmkdir(BOOTLOADER_PATH "/loader", 0777);
@@ -148,7 +150,7 @@ static void gummiboot_execute(void)
 	pr_info("Constructing loader entries");
 	string_list_iterate(bootimages, bootimage_cb, (void*)fd);
 
-	ret = execute_command("efibootmgr -c -d /dev/block/%s -l \\\\gummiboot.efi -v -p %s -D %s -L %s",
+	ret = execute_command("efibootmgr -c -d /dev/block/%s -l \\\\shim.efi -v -p %s -D %s -L %s",
 			hashmapGetPrintf(ictx.opts, NULL, BASE_INSTALL_DISK),
 			hashmapGetPrintf(ictx.opts, NULL, "partition.bootloader:index"),
 			EFI_ENTRY, EFI_ENTRY);
