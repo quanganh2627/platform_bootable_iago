@@ -26,6 +26,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <dirent.h>
+#include <ftw.h>
 
 #include <cutils/config_utils.h>
 #include <cutils/misc.h>
@@ -106,6 +107,15 @@ static void sighandler(int signum)
 	raise(signum);
 }
 
+
+int delete_cb(const char *fpath, const struct stat *sb _unused,
+		int typeflag _unused, struct FTW *ftwbuf _unused)
+{
+	remove(fpath);
+	return 0;
+}
+
+
 static void gummiboot_execute(void)
 {
 	char *device;
@@ -126,8 +136,7 @@ static void gummiboot_execute(void)
 	pr_info("Copying gummiboot support files");
 	copy_file(IMAGES_PATH "/gummiboot.efi", BOOTLOADER_PATH "/gummiboot.efi");
 
-	// TODO recursively delete loader directory if it already exists
-
+	nftw(BOOTLOADER_PATH "/loader", delete_cb, 64, FTW_DEPTH | FTW_PHYS);
 	xmkdir(BOOTLOADER_PATH "/loader", 0777);
 	fd = xopen(BOOTLOADER_PATH "/loader/loader.conf", O_WRONLY | O_CREAT);
 	put_string(fd, "timeout %s\n", hashmapGetPrintf(ictx.opts, TIMEOUT_DFL, GUMMIBOOT_TIMEOUT));
