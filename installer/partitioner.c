@@ -267,6 +267,8 @@ static void delete_android(struct gpt *gpt)
 	}
 }
 
+/* Used for scanning /sys/block/; reject any matches */
+#define DISK_MATCH_REGEX	"^[.]+|(ram|loop|sr)[0-9]+|mmcblk[0-9]+(rpmb|boot[0-9]+)$"
 
 static void partitioner_prepare(void)
 {
@@ -299,11 +301,15 @@ static void partitioner_prepare(void)
 		if (!dp)
 			break;
 
-		if (!regexec(&diskreg, dp->d_name, 0, NULL, 0))
+		if (!regexec(&diskreg, dp->d_name, 0, NULL, 0)) {
+			pr_debug("Skipping %s\n", dp->d_name);
 			continue;
+		}
 
-		if (!strcmp(dp->d_name, media))
+		if (!strcmp(dp->d_name, media)) {
+			pr_debug("Skipping Iago media %s\n", dp->d_name);
 			continue;
+		}
 
 		device = xasprintf("/dev/block/%s", dp->d_name);
 		sectors = read_sysfs_int("/sys/block/%s/size", dp->d_name);
@@ -337,7 +343,7 @@ static void partitioner_prepare(void)
 		}
 
 		ptn_index = check_for_ptn(gpt, get_guid_type(PART_MS_RESERVED));
-		if (ptn_index >= 0) {
+		if (ptn_index > 0) {
 			/* User data NTFS partition always right after
 			 * the ms reserved partition */
 			uint64_t ret, size;
@@ -376,7 +382,7 @@ static void partitioner_prepare(void)
 			pr_debug("%s: No Windows installation found\n", dp->d_name);
 
 		ptn_index = check_for_ptn(gpt, get_guid_type(PART_ESP));
-		if (ptn_index >= 0) {
+		if (ptn_index > 0) {
 			/* We found an EFI system partition and may
 			 * re-use it */
 			pr_debug("%s: Found ESP at partition index %d\n",
@@ -414,6 +420,10 @@ static void partitioner_prepare(void)
 		gpt_close(gpt);
 	}
 	closedir(dir);
+
+	if (strlen(disks) == 0)
+		die("No suitable installation media found!");
+
 	xhashmapPut(ictx.opts, xasprintf(BASE_DISK_LIST), disks);
 }
 

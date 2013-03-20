@@ -115,7 +115,4 @@ void add_iago_plugin(struct iago_plugin *p);
 /* Partitions to include in fs_mgr fstab */
 #define BASE_FSMGR_PTNS		"base:fsmgr_partitions"
 
-/* Used for scanning /sys/block/; reject any matches */
-#define DISK_MATCH_REGEX	"^[.]+|(ram|loop)[0-9]+|mmcblk[0-9]+(rpmb|boot[0-9]+)$"
-
 #endif

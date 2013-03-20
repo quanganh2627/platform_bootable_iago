@@ -30,10 +30,9 @@
 
 #include <cutils/klog.h>
 
-#include <iago.h>
-
-#define INSTALL_MOUNT   "/installmedia"
-#define TMP_NODE        "/dev/__iago_blkdev"
+#define DISK_MATCH_REGEX    "^[.]+|(ram|loop)[0-9]+|mmcblk[0-9]+(rpmb|boot[0-9]+)$"
+#define INSTALL_MOUNT       "/installmedia"
+#define TMP_NODE            "/dev/__iago_blkdev"
 
 #define dbg(fmt, ...)       KLOG_INFO("iago", "%s(): " fmt, __func__, ##__VA_ARGS__)
 #define dbg_perror(x)       dbg("%s: %s\n", x, strerror(errno))
