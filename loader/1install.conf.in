@@ -1,5 +1,5 @@
 title	Run automated installer
 linux	/kernel
 initrd	/ramdisk.img
-options CMDLINE PREINIT_CHECK_FAT=1 vt.init_hide=0 androidboot.initrc=/init.nogui.rc androidboot.iago.ini=/installmedia/images/iago-default.ini
+options CMDLINE vt.init_hide=0 androidboot.initrc=/init.nogui.rc androidboot.iago.ini=/installmedia/images/iago-default.ini
 
