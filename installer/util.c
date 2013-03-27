@@ -156,6 +156,8 @@ static void __dd(const char *src, const char *dest, bool copy_ok, bool append)
 		flags |= O_CREAT;
 	if (append)
 		flags |= O_APPEND;
+	else
+		flags |= O_TRUNC;
 
 	ofd = xopen(dest, flags);
 
