@@ -1,0 +1,2 @@
+title	Enable secure boot (experimental)
+efi \LockDown.efi
