@@ -3,9 +3,11 @@ ifeq ($(TARGET_USE_IAGO),true)
 LOCAL_PATH := $(call my-dir)
 
 iago_base := $(PRODUCT_OUT)/iago
-iago_ramdisk_root := $(iago_base)/ramdisk
+iago_live_ramdisk_root := $(iago_base)/ramdisk_live
+iago_nogui_ramdisk_root := $(iago_base)/ramdisk_nogui
 iago_rootfs := $(iago_base)/root
-iago_ramdisk := $(iago_base)/ramdisk.img
+iago_nogui_ramdisk := $(iago_base)/ramdisk_live.img
+iago_live_ramdisk := $(iago_base)/ramdisk_nogui.img
 iago_images_root := $(iago_base)/images
 iago_images_sfs := $(iago_base)/images.sfs
 iago_fs_img := $(iago_base)/root.vfat
@@ -13,6 +15,9 @@ iago_img := $(PRODUCT_OUT)/live.img
 iago_ini := $(iago_base)/iago.ini
 iago_default_ini := $(iago_base)/iago-default.ini
 iago_efi_dir := $(iago_rootfs)/EFI/BOOT/
+iago_live_bootimage := $(iago_base)/liveboot.img
+iago_interactive_bootimage := $(iago_base)/intboot.img
+iago_automated_bootimage := $(iago_base)/autoboot.img
 
 define create-sfs
 	$(hide) PATH=/sbin:/usr/sbin:$(PATH) mksquashfs $(1) $(2) -no-recovery -noappend
@@ -85,7 +90,29 @@ ifeq ($(TARGET_USERIMAGES_SPARSE_EXT_DISABLED),false)
 endif
 	$(call create-sfs,$(iago_images_root),$@)
 
-$(iago_ramdisk): \
+$(iago_live_ramdisk): \
+		$(LOCAL_PATH)/image.mk \
+		$(LOCAL_PATH)/init.iago.rc \
+		$(INSTALLED_RAMDISK_TARGET) \
+		$(MKBOOTFS) \
+		$(iago_base)/preinit \
+		$(iago_ini) \
+		| $(MINIGZIP) $(ACP) \
+
+	$(hide) rm -rf $(iago_live_ramdisk_root)
+	$(hide) mkdir -p $(iago_live_ramdisk_root)
+	$(hide) $(ACP) -rf $(TARGET_ROOT_OUT)/* $(iago_live_ramdisk_root)
+	$(hide) mv $(iago_live_ramdisk_root)/init $(iago_live_ramdisk_root)/init2
+	$(hide) $(ACP) -p $(iago_base)/preinit $(iago_live_ramdisk_root)/init
+	$(hide) mkdir -p $(iago_live_ramdisk_root)/installmedia
+	$(hide) mkdir -p $(iago_live_ramdisk_root)/tmp
+	$(hide) mkdir -p $(iago_live_ramdisk_root)/mnt
+	$(hide) echo "import init.iago.rc" >> $(iago_live_ramdisk_root)/init.rc
+	$(hide) sed -i -r 's/^[\t ]*(mount_all|mount yaffs|mount ext).*//g' $(iago_live_ramdisk_root)/init*.rc
+	$(hide) $(ACP) $(LOCAL_PATH)/init.iago.rc $(iago_live_ramdisk_root)
+	$(hide) $(MKBOOTFS) $(iago_live_ramdisk_root) | $(MINIGZIP) > $@
+
+$(iago_nogui_ramdisk): \
 		$(LOCAL_PATH)/image.mk \
 		$(LOCAL_PATH)/init.nogui.rc \
 		$(LOCAL_PATH)/init.iago.rc \
@@ -95,19 +122,50 @@ $(iago_ramdisk): \
 		$(iago_ini) \
 		| $(MINIGZIP) $(ACP) \
 
-	$(hide) rm -rf $(iago_ramdisk_root)
-	$(hide) mkdir -p $(iago_ramdisk_root)
-	$(hide) $(ACP) -rf $(TARGET_ROOT_OUT)/* $(iago_ramdisk_root)
-	$(hide) mv $(iago_ramdisk_root)/init $(iago_ramdisk_root)/init2
-	$(hide) $(ACP) -p $(iago_base)/preinit $(iago_ramdisk_root)/init
-	$(hide) mkdir -p $(iago_ramdisk_root)/installmedia
-	$(hide) mkdir -p $(iago_ramdisk_root)/tmp
-	$(hide) mkdir -p $(iago_ramdisk_root)/mnt
-	$(hide) echo "import init.iago.rc" >> $(iago_ramdisk_root)/init.rc
-	$(hide) $(ACP) $(LOCAL_PATH)/init.nogui.rc $(iago_ramdisk_root)/init.nogui.rc
-	$(hide) sed -i -r 's/^[\t ]*(mount_all|mount yaffs|mount ext).*//g' $(iago_ramdisk_root)/init*.rc
-	$(hide) $(ACP) $(LOCAL_PATH)/init.iago.rc $(iago_ramdisk_root)
-	$(hide) $(MKBOOTFS) $(iago_ramdisk_root) | $(MINIGZIP) > $@
+	$(hide) rm -rf $(iago_nogui_ramdisk_root)
+	$(hide) mkdir -p $(iago_nogui_ramdisk_root)
+	$(hide) $(ACP) -rf $(TARGET_ROOT_OUT)/* $(iago_nogui_ramdisk_root)
+	$(hide) mv $(iago_nogui_ramdisk_root)/init $(iago_nogui_ramdisk_root)/init2
+	$(hide) $(ACP) -p $(iago_base)/preinit $(iago_nogui_ramdisk_root)/init
+	$(hide) mkdir -p $(iago_nogui_ramdisk_root)/installmedia
+	$(hide) mkdir -p $(iago_nogui_ramdisk_root)/tmp
+	$(hide) mkdir -p $(iago_nogui_ramdisk_root)/mnt
+	$(hide) $(ACP) $(LOCAL_PATH)/init.nogui.rc $(iago_nogui_ramdisk_root)/init.rc
+	$(hide) $(ACP) $(LOCAL_PATH)/init.iago.rc $(iago_nogui_ramdisk_root)
+	$(hide) $(MKBOOTFS) $(iago_nogui_ramdisk_root) | $(MINIGZIP) > $@
+
+$(iago_live_bootimage): \
+		$(LOCAL_PATH)/image.mk \
+		$(INSTALLED_KERNEL_TARGET) \
+		$(iago_live_ramdisk) \
+		$(MKBOOTIMG) \
+
+	$(hide) $(MKBOOTIMG) --kernel $(INSTALLED_KERNEL_TARGET) \
+			--ramdisk $(iago_live_ramdisk) \
+			--cmdline "$(BOARD_KERNEL_CMDLINE)" \
+			--output $@
+
+$(iago_interactive_bootimage): \
+		$(LOCAL_PATH)/image.mk \
+		$(INSTALLED_KERNEL_TARGET) \
+		$(iago_nogui_ramdisk) \
+		$(MKBOOTIMG) \
+
+	$(hide) $(MKBOOTIMG) --kernel $(INSTALLED_KERNEL_TARGET) \
+			--ramdisk $(iago_nogui_ramdisk) \
+			--cmdline "$(BOARD_KERNEL_CMDLINE) quiet vt.init_hide=0 androidboot.iago.cli=1" \
+			--output $@
+
+$(iago_automated_bootimage): \
+		$(LOCAL_PATH)/image.mk \
+		$(INSTALLED_KERNEL_TARGET) \
+		$(iago_nogui_ramdisk) \
+		$(MKBOOTIMG) \
+
+	$(hide) $(MKBOOTIMG) --kernel $(INSTALLED_KERNEL_TARGET) \
+			--ramdisk $(iago_nogui_ramdisk) \
+			--cmdline "$(BOARD_KERNEL_CMDLINE) vt.init_hide=0 androidboot.iago.ini=/installmedia/images/iago-default.ini" \
+			--output $@
 
 ifeq ($(TARGET_KERNEL_ARCH),i386)
 efi_default_name := bootia32.efi
@@ -128,10 +186,11 @@ iago_efi_loader := $(iago_rootfs)/loader
 
 $(iago_fs_img): \
 		$(LOCAL_PATH)/image.mk \
-		$(iago_ramdisk) \
+		$(iago_live_bootimage) \
+		$(iago_interactive_bootimage) \
+		$(iago_automated_bootimage) \
 		$(iago_images_sfs) \
 		$(iago_gummiboot_files) \
-		$(INSTALLED_KERNEL_TARGET) \
 		$(LOCAL_PATH)/make_vfatfs \
 		$(GUMMIBOOT_EFI) \
 		$(LOCAL_PATH)/loader/loader.conf \
@@ -139,8 +198,9 @@ $(iago_fs_img): \
 
 	$(hide) rm -rf $(iago_rootfs)
 	$(hide) mkdir -p $(iago_rootfs)
-	$(hide) $(ACP) -f $(iago_ramdisk) $(iago_rootfs)/ramdisk.img
-	$(hide) $(ACP) -f $(INSTALLED_KERNEL_TARGET) $(iago_rootfs)/kernel
+	$(hide) $(ACP) -f $(iago_live_bootimage) $(iago_rootfs)/liveboot.img
+	$(hide) $(ACP) -f $(iago_interactive_bootimage) $(iago_rootfs)/intboot.img
+	$(hide) $(ACP) -f $(iago_automated_bootimage) $(iago_rootfs)/autoboot.img
 	$(hide) touch $(iago_rootfs)/iago-cookie
 	$(hide) $(ACP) -f $(iago_images_sfs) $(iago_rootfs)
 	$(hide) mkdir -p $(iago_rootfs)/images
@@ -191,7 +251,8 @@ $(iago_base)/isolinux.cfg: $(LOCAL_PATH)/isolinux.cfg
 
 $(iago_legacy_image): \
 		$(LOCAL_PATH)/image.mk \
-		$(iago_ramdisk) \
+		$(iago_nogui_ramdisk) \
+		$(iago_live_ramdisk) \
 		$(iago_images_sfs) \
 		$(iago_isolinux_files) \
 		$(INSTALLED_KERNEL_TARGET) \
@@ -200,7 +261,8 @@ $(iago_legacy_image): \
 
 	$(hide) rm -rf $(iago_iso_root)
 	$(hide) mkdir -p $(iago_iso_root)
-	$(hide) $(ACP) -f $(iago_ramdisk) $(iago_iso_root)/ramdisk.img
+	$(hide) $(ACP) -f $(iago_live_ramdisk) $(iago_iso_root)/ramdisk_live.img
+	$(hide) $(ACP) -f $(iago_nogui_ramdisk) $(iago_iso_root)/ramdisk_nogui.img
 	$(hide) $(ACP) -f $(INSTALLED_KERNEL_TARGET) $(iago_iso_root)/kernel
 	$(hide) touch $(iago_iso_root)/iago-cookie
 	$(hide) $(ACP) -f $(iago_images_sfs) $(iago_iso_root)

@@ -1,5 +1,3 @@
 title	Live Android session
-linux	/kernel
-initrd	/ramdisk.img
-options CMDLINE
+androidfile liveboot.img
 
