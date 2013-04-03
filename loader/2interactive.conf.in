@@ -1,5 +1,5 @@
 title	Run interactive installer
 linux	/kernel
 initrd	/ramdisk.img
-options CMDLINE PREINIT_CHECK_FAT=1 quiet vt.init_hide=0 androidboot.initrc=/init.nogui.rc androidboot.iago.cli=1
+options CMDLINE quiet vt.init_hide=0 androidboot.initrc=/init.nogui.rc androidboot.iago.cli=1
 

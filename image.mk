@@ -169,4 +169,49 @@ $(iago_img): \
 .PHONY: liveimg
 liveimg: $(iago_img)
 
+# The following rules are for constructing an Iago image which boots in
+# legacy mode. You CANNOT perform EFI installations even if you use an
+# EFI bootloader plug-in, as the necessary call to efibootmgr can't be
+# made without available EFI runtime services. You should use a legacy
+# bootloader plugin.
+
+iago_iso_root := $(iago_base)/legacyroot
+iago_legacy_image := $(PRODUCT_OUT)/legacy.iso
+
+iago_isolinux_files := \
+	$(SYSLINUX_BASE)/isolinux.bin \
+	$(SYSLINUX_BASE)/vesamenu.c32 \
+	$(iago_base)/isolinux.cfg \
+
+$(iago_base)/isolinux.cfg: $(LOCAL_PATH)/isolinux.cfg
+	$(hide) mkdir -p $(iago_base)
+	$(hide) sed "s|CMDLINE|$(BOARD_KERNEL_CMDLINE)|" $^ > $@
+
+$(iago_legacy_image): \
+		$(LOCAL_PATH)/image.mk \
+		$(iago_ramdisk) \
+		$(iago_images_sfs) \
+		$(iago_isolinux_files) \
+		$(INSTALLED_KERNEL_TARGET) \
+		$(HOST_OUT_EXECUTABLES)/isohybrid \
+		| $(ACP) \
+
+	$(hide) rm -rf $(iago_iso_root)
+	$(hide) mkdir -p $(iago_iso_root)
+	$(hide) $(ACP) -f $(iago_ramdisk) $(iago_iso_root)/ramdisk.img
+	$(hide) $(ACP) -f $(INSTALLED_KERNEL_TARGET) $(iago_iso_root)/kernel
+	$(hide) touch $(iago_iso_root)/iago-cookie
+	$(hide) $(ACP) -f $(iago_images_sfs) $(iago_iso_root)
+	$(hide) mkdir -p $(iago_iso_root)/isolinux
+	$(hide) mkdir -p $(iago_iso_root)/images
+	$(hide) $(ACP) -f $(iago_isolinux_files) $(iago_iso_root)/isolinux/
+	$(hide) genisoimage -vJURT -b isolinux/isolinux.bin -c isolinux/boot.cat \
+		-no-emul-boot -boot-load-size 4 -boot-info-table \
+		-input-charset utf-8 -V "IAGO Android Live/Installer CD" \
+		-o $@ $(iago_iso_root)
+	$(hide) $(HOST_OUT_EXECUTABLES)/isohybrid $@
+
+.PHONY: legacyimg
+legacyimg: $(iago_legacy_image)
+
 endif # TARGET_USE_IAGO
