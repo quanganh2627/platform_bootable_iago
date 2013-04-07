@@ -803,6 +803,9 @@ struct gpt *execute_dual_boot(char *disk, char *partlist, char *device)
 		resize_ntfs_partition(win_index, gpt, win_resize);
 	}
 
+	if (win_index)
+		xhashmapPut(ictx.iprops, xstrdup("ro.rtc_local_time"), "1");
+
 	if (xatoll(hashmapGetPrintf(ictx.opts, "0",
 				"disk.%s:android_size", disk))) {
 		pr_info("Deleting existing Android installation");
