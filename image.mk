@@ -194,6 +194,8 @@ $(iago_fs_img): \
 		$(iago_gummiboot_files) \
 		$(LOCAL_PATH)/make_vfatfs \
 		$(GUMMIBOOT_EFI) \
+		$(UEFI_SHIM_EFI) \
+		$(MOKMANAGER_EFI) \
 		$(LOCAL_PATH)/loader/loader.conf \
 		$(LOCKDOWN_EFI) \
 		| $(ACP) \
