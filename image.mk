@@ -143,6 +143,7 @@ $(iago_live_bootimage): \
 	$(hide) $(MKBOOTIMG) --kernel $(INSTALLED_KERNEL_TARGET) \
 			--ramdisk $(iago_live_ramdisk) \
 			--cmdline "$(BOARD_KERNEL_CMDLINE)" \
+			$(BOARD_MKBOOTIMG_ARGS) \
 			--output $@
 
 $(iago_interactive_bootimage): \
@@ -154,6 +155,7 @@ $(iago_interactive_bootimage): \
 	$(hide) $(MKBOOTIMG) --kernel $(INSTALLED_KERNEL_TARGET) \
 			--ramdisk $(iago_nogui_ramdisk) \
 			--cmdline "$(BOARD_KERNEL_CMDLINE) quiet vt.init_hide=0 androidboot.iago.cli=1" \
+			$(BOARD_MKBOOTIMG_ARGS) \
 			--output $@
 
 $(iago_automated_bootimage): \
@@ -165,6 +167,7 @@ $(iago_automated_bootimage): \
 	$(hide) $(MKBOOTIMG) --kernel $(INSTALLED_KERNEL_TARGET) \
 			--ramdisk $(iago_nogui_ramdisk) \
 			--cmdline "$(BOARD_KERNEL_CMDLINE) vt.init_hide=0 androidboot.iago.ini=/installmedia/images/iago-default.ini" \
+			$(BOARD_MKBOOTIMG_ARGS) \
 			--output $@
 
 ifeq ($(TARGET_KERNEL_ARCH),i386)
