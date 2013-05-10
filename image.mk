@@ -176,11 +176,21 @@ else
 efi_default_name := bootx64.efi
 endif
 
-iago_gummiboot_files := \
+iago_loader_configs := \
 	$(iago_base)/0live.conf \
         $(iago_base)/1install.conf \
 	$(iago_base)/2interactive.conf \
 	$(iago_base)/3secureboot.conf \
+
+iago_efi_bins := \
+	$(GUMMIBOOT_EFI) \
+	$(UEFI_SHIM_EFI) \
+	$(LOCKDOWN_EFI) \
+
+ifneq ($(TARGET_USE_MOKMANAGER),false)
+iago_loader_configs += $(iago_base)/4mokmanager.conf
+iago_efi_bins += $(MOKMANAGER_EFI)
+endif
 
 $(iago_base)/%.conf: $(LOCAL_PATH)/loader/%.conf.in
 	$(hide) mkdir -p $(iago_base)
@@ -194,11 +204,9 @@ $(iago_fs_img): \
 		$(iago_interactive_bootimage) \
 		$(iago_automated_bootimage) \
 		$(iago_images_sfs) \
-		$(iago_gummiboot_files) \
+		$(iago_loader_configs) \
+		$(iago_efi_bins) \
 		$(LOCAL_PATH)/make_vfatfs \
-		$(GUMMIBOOT_EFI) \
-		$(UEFI_SHIM_EFI) \
-		$(MOKMANAGER_EFI) \
 		$(LOCAL_PATH)/loader/loader.conf \
 		$(LOCKDOWN_EFI) \
 		| $(ACP) \
@@ -213,12 +221,10 @@ $(iago_fs_img): \
 	$(hide) mkdir -p $(iago_rootfs)/images
 	$(hide) mkdir -p $(iago_efi_dir)
 	$(hide) mkdir -p $(iago_efi_loader)/entries
-	$(hide) $(ACP) $(GUMMIBOOT_EFI) $(iago_rootfs)
-	$(hide) $(ACP) $(MOKMANAGER_EFI) $(iago_rootfs)
-	$(hide) $(ACP) $(LOCKDOWN_EFI) $(iago_rootfs)
 	$(hide) $(ACP) $(UEFI_SHIM_EFI) $(iago_efi_dir)/$(efi_default_name)
+	$(hide) $(ACP) $(iago_efi_bins) $(iago_efi_dir)
 	$(hide) $(ACP) $(LOCAL_PATH)/loader/loader.conf $(iago_efi_loader)/loader.conf
-	$(hide) $(ACP) -f $(iago_gummiboot_files) $(iago_efi_loader)/entries/
+	$(hide) $(ACP) -f $(iago_loader_configs) $(iago_efi_loader)/entries/
 	$(hide) $(LOCAL_PATH)/make_vfatfs $(iago_rootfs) $@
 
 edit_mbr := $(HOST_OUT_EXECUTABLES)/editdisklbl

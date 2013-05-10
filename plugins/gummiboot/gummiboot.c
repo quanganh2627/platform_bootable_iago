@@ -121,7 +121,9 @@ static void gummiboot_execute(void)
 	pr_info("Copying gummiboot support files");
 	copy_file(IMAGES_PATH "/gummiboot.efi", BOOTLOADER_PATH "/gummiboot.efi");
 	copy_file(IMAGES_PATH "/shim.efi", BOOTLOADER_PATH "/shim.efi");
+#ifdef USE_MOKMANAGER
 	copy_file(IMAGES_PATH "/MokManager.efi", BOOTLOADER_PATH "/MokManager.efi");
+#endif
 
 	nftw(BOOTLOADER_PATH "/loader", delete_cb, 64, FTW_DEPTH | FTW_PHYS);
 	xmkdir(BOOTLOADER_PATH "/loader", 0777);

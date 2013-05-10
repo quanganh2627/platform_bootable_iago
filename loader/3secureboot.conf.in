@@ -1,2 +1,2 @@
-title	Enable secure boot (experimental)
-efi \LockDown.efi
+title	Provision testing DB/KEK/PK keys
+efi \EFI\BOOT\LockDown.efi
