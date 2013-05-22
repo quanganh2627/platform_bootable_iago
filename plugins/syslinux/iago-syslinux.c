@@ -53,21 +53,15 @@ static void do_install_syslinux(const char *device)
 
 void syslinux_cli(void)
 {
-	if (!ui_ask("Install SYSLINUX bootloader? (legacy mode, UNSUPPORTED)", false))
+	/* If some other bootloader already specified, bail */
+	if (strcmp(hashmapGetPrintf(ictx.opts, "none", BASE_BOOTLOADER), "none"))
+		return;
+
+	if (!ui_ask("Install SYSLINUX bootloader? (legacy mode, UNSUPPORTED)", true))
 		return;
 
 	xhashmapPut(ictx.opts, xstrdup(BASE_BOOTLOADER),
 			xstrdup("syslinux"));
-}
-
-static bool cmdline_cb(void *k, void *v, void *context)
-{
-	int fd = (int)context;
-	char *key = k;
-	char *value = v;
-
-	put_string(fd, " %s=%s", key, value);
-	return true;
 }
 
 
@@ -85,11 +79,8 @@ static bool bootimage_cb(char *entry, int index _unused, void *context)
 	put_string(fd, "    com32 android.c32\n");
 	disk = hashmapGetPrintf(ictx.opts, NULL,
 			"%s:index", prefix);
-	put_string(fd, "    append current %s", disk);
-
-	hashmapForEach(ictx.cmdline, cmdline_cb, (void*)fd);
-
-	put_string(fd, "\n\n");
+	put_string(fd, "    append current %s androidboot.install_id=%s\n",
+			disk, hashmapGetPrintf(ictx.opts, "", INSTALL_ID));
 	return true;
 }
 

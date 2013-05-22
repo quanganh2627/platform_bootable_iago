@@ -43,8 +43,15 @@
 void gummiboot_cli(void)
 {
 	unsigned int timeout;
+	struct stat sb;
 
-	// TODO skip if BASE_BOOTLOADER is set already
+	/* If some other bootloader already specified, bail */
+	if (strcmp(hashmapGetPrintf(ictx.opts, "none", BASE_BOOTLOADER), "none"))
+		return;
+
+	/* Check if booted in legacy mode */
+	if (stat("/sys/firmware/efi", &sb))
+		return;
 
 	if (!ui_ask("Install GummiBoot bootloader?", true))
 		return;
