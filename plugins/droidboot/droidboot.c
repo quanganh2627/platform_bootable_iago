@@ -18,22 +18,7 @@
 #include <iago.h>
 #include <iago_util.h>
 
-void droidboot_cli(void)
-{
-	char *plist;
-
-	if (!ui_ask("Install Fastboot?", true))
-		return;
-
-	plist = hashmapGetPrintf(ictx.opts, NULL, BASE_BOOT_LIST);
-	string_list_append(&plist, "fastboot");
-	xhashmapPut(ictx.opts, xstrdup(BASE_BOOT_LIST), plist);
-	xhashmapPut(ictx.opts, xstrdup("partition.fastboot:mode"), xstrdup("image"));
-}
-
-static struct iago_plugin plugin = {
-	.cli_session = droidboot_cli,
-};
+static struct iago_plugin plugin;
 
 struct iago_plugin *droidboot_init(void)
 {
