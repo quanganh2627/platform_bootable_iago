@@ -50,6 +50,7 @@ int execute_command_data(void *data, unsigned sz, const char *fmt, ...)
 		__attribute__((format(printf,3,4)));
 int execute_command_output(void *data, size_t *sz_ptr, const char *fmt, ...)
 		__attribute__((format(printf,3,4)));
+int execute_command_no_shell(const char *name, const char *arg, ...);
 
 #define die(fmt, ...) __die("%s:%s:%d " fmt, __FILE__, __func__, __LINE__, \
 		##__VA_ARGS__)

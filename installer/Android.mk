@@ -6,6 +6,7 @@ LOCAL_SRC_FILES := main.c \
 		   util.c \
 		   partitioner.c \
 		   finalizer.c \
+		   ota.c \
 		   imagewriter.c \
 
 
@@ -17,13 +18,16 @@ plugin_lib_names := $(foreach plugin,$(TARGET_IAGO_PLUGINS),libiago_$(notdir $(p
 
 LOCAL_MODULE := iagod
 LOCAL_MODULE_TAGS := optional
-LOCAL_SHARED_LIBRARIES := libcutils \
-			  liblog \
-			  libext4_utils \
-			  libz \
-			  libgpt \
+LOCAL_FORCE_STATIC_EXECUTABLE := true
 
 LOCAL_STATIC_LIBRARIES := libiniparser \
+			  libc \
+			  libgpt_static \
+			  libcutils \
+			  liblog \
+			  libsparse_static \
+			  libext4_utils_static \
+			  libz \
 			  $(plugin_lib_names) \
 			  $(TARGET_IAGO_EXTRA_LIBS) \
 

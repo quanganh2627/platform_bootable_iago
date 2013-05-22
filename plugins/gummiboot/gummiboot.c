@@ -144,12 +144,14 @@ static void gummiboot_execute(void)
 	pr_info("Constructing loader entries");
 	string_list_iterate(bootimages, bootimage_cb, (void*)fd);
 
-	ret = execute_command("efibootmgr -c -d /dev/block/%s -l \\\\shim.efi -v -p %s -D %s -L %s",
-			hashmapGetPrintf(ictx.opts, NULL, BASE_INSTALL_DISK),
-			hashmapGetPrintf(ictx.opts, NULL, "partition.bootloader:index"),
-			EFI_ENTRY, EFI_ENTRY);
+	device = xasprintf("/dev/block/%s", hashmapGetPrintf(ictx.opts, NULL, BASE_INSTALL_DISK));
+	ret = execute_command_no_shell("/sbin/efibootmgr",
+			"efibootmgr", "-c", "-d", device, "-l", "\\shim.efi",
+			"-v", "-p", hashmapGetPrintf(ictx.opts, NULL, "partition.bootloader:index"),
+			"-D", EFI_ENTRY, "-L", EFI_ENTRY, NULL);
+	free(device);
 	if (ret)
-		die("Some problem with efibootmgr");
+		die("'efibootmgr' encountered an error (status %x)", ret);
 
 	umount(BOOTLOADER_PATH);
 	rmdir(BOOTLOADER_PATH);

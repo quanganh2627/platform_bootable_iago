@@ -1,0 +1,41 @@
+import /init.usb.rc
+import /init.trace.rc
+
+on early-init
+    start ueventd
+
+on init
+    export PATH /sbin
+    export ANDROID_DATA /data
+
+    setprop service.adb.tcp.port 5555
+
+on fs
+    mount tmpfs tmpfs /tmp
+    mount tmpfs tmpfs /data
+    mount tmpfs tmpfs /cache
+    write /sys/class/backlight/intel_backlight/brightness $[/sys/class/backlight/intel_backlight/max_brightness]
+
+on boot
+    start iagod
+
+service iagod /sbin/iagod
+    class iago
+    user root
+    console
+    oneshot
+
+on boot
+    ifup lo
+    hostname localhost
+    domainname localdomain
+    class_start main
+
+service ueventd /sbin/ueventd
+    critical
+
+# adbd is controlled via property triggers in init.<platform>.usb.rc
+service adbd /sbin/adbd
+    class core
+    disabled
+

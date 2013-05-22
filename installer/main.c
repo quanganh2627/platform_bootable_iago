@@ -110,8 +110,8 @@ static void execution_phase(void)
 int main(int argc _unused, char **argv _unused)
 {
 	char prop[PROPERTY_VALUE_MAX];
-	char *default_ini = NULL;
-	bool cli_mode;
+	char *reboot_target;
+	bool cli_mode, gui_mode;
 
 	pr_info("iago daemon " IAGO_VERSION " starting\n");
 	umask(066);
@@ -128,12 +128,16 @@ int main(int argc _unused, char **argv _unused)
 #endif
 	init_iago_context();
 	cli_mode = (property_get("ro.boot.iago.cli", prop, "") > 0);
+	gui_mode = (property_get("ro.boot.iago.gui", prop, "") > 0);
 
 	/* Initializes the GPT partition table */
 	add_iago_plugin(partitioner_init());
 
 	/* Writes out the base image files/formats empty partitions */
 	add_iago_plugin(imagewriter_init());
+
+	/* Stages OTA update for 2nd phase */
+	add_iago_plugin(ota_init());
 
 	/* Append any non-builtin plugin structs */
 	register_iago_plugins();
@@ -142,11 +146,12 @@ int main(int argc _unused, char **argv _unused)
 	 * install.prop, fstab, and recovery.fstab */
 	add_iago_plugin(finalizer_init());
 
-	copy_file("/installmedia/images/iago.ini", COMBINED_INI);
 	if (property_get("ro.boot.iago.ini", prop, "") > 0) {
-		default_ini = xstrdup(prop);
-		append_file(default_ini, COMBINED_INI);
-	}
+		char *token;
+		for (token = strtok(prop, ","); token; token = strtok(NULL, ","))
+			append_file(token, COMBINED_INI);
+	} else
+		die("androidboot.iago.ini not set!\n");
 	load_ini_file(COMBINED_INI);
 	preparation_phase();
 
@@ -154,7 +159,7 @@ int main(int argc _unused, char **argv _unused)
 		/* Use the built-in command-line text interactive installer
 		 * if specified */
 		cli_phase();
-	} else if (!default_ini) {
+	} else if (gui_mode) {
 		/* TODO this isn't fully implemented */
 		//write_opts(ictx.opts, "/data/iago-prepare.ini");
 		hashmap_destroy(ictx.opts);
@@ -178,10 +183,14 @@ int main(int argc _unused, char **argv _unused)
 		ui_pause();
 
 	execution_phase();
-	if (cli_mode)
-		pr_info("You may now reboot into the installed image.\n");
-	else
-		android_reboot(ANDROID_RB_RESTART, 0, NULL);
+
+	if (cli_mode) {
+		pr_info("All done. Please remove installation media. Device will now reboot");
+		ui_pause();
+	}
+
+	reboot_target = hashmapGetPrintf(ictx.opts, "", BASE_REBOOT);
+	android_reboot(ANDROID_RB_RESTART2, 0, reboot_target);
 
 	return 0;
 }

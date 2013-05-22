@@ -14,6 +14,7 @@ iago_fs_img := $(iago_base)/root.vfat
 iago_img := $(PRODUCT_OUT)/live.img
 iago_ini := $(iago_base)/iago.ini
 iago_default_ini := $(iago_base)/iago-default.ini
+iago_provision_ini := $(iago_base)/iago-provision.ini
 iago_efi_dir := $(iago_rootfs)/EFI/BOOT/
 iago_live_bootimage := $(iago_base)/liveboot.img
 iago_interactive_bootimage := $(iago_base)/intboot.img
@@ -26,7 +27,6 @@ endef
 IAGO_IMAGES_DEPS := \
 	$(INSTALLED_BOOTIMAGE_TARGET) \
 	$(INSTALLED_RECOVERYIMAGE_TARGET) \
-	$(iago_base)/iagod \
 
 ifeq ($(TARGET_USERIMAGES_SPARSE_EXT_DISABLED),false)
 # need to convert sparse images back to normal ext4
@@ -60,7 +60,7 @@ $(iago_ini): \
 
 IAGO_IMAGES_DEPS += $(iago_ini)
 
-# Build the iago-default.ini, which is options for non-interactive mode
+# Build the iago-default.ini, which is overlay options for non-interactive mode
 $(iago_default_ini): \
 		bootable/iago/installer/iago-default.ini \
 		$(foreach plugin,$(TARGET_IAGO_PLUGINS),$(wildcard $(plugin)/iago-default.ini)) \
@@ -71,6 +71,30 @@ $(iago_default_ini): \
 
 IAGO_IMAGES_DEPS += $(iago_default_ini)
 
+# Build the iago-provision.ini, which is overlay options for provisioning images.
+# FIXME: This is just to change the config to rely on the embedded OTA update
+# to provision /system and non-recovery boot images; would be nice to find a way
+# to loopback mount OTA update zips so that we can use OTA updates in the live images
+# as well.
+$(iago_provision_ini): \
+		bootable/iago/installer/iago-provision.ini \
+		$(foreach plugin,$(TARGET_IAGO_PLUGINS),$(wildcard $(plugin)/iago-provision.ini)) \
+		$(TARGET_IAGO_PROVISION_INI) \
+
+	$(hide) mkdir -p $(dir $@)
+	$(hide) cat $^ > $@
+
+# These all need to go in the target-files-package, as those are used to construct
+# provisioning images.
+INSTALLED_RADIOIMAGE_TARGET += \
+			$(iago_ini) \
+			$(iago_default_ini) \
+			$(iago_provision_ini) \
+			$(iago_base)/preinit \
+			$(iago_base)/iagod \
+			$(iago_base)/efibootmgr \
+			bootable/iago/init.provision.rc \
+			bootable/iago/live_img_layout.conf \
 
 $(iago_images_sfs): \
 		$(IAGO_IMAGES_DEPS) \
@@ -96,12 +120,17 @@ $(iago_live_ramdisk): \
 		$(INSTALLED_RAMDISK_TARGET) \
 		$(MKBOOTFS) \
 		$(iago_base)/preinit \
+		$(iago_base)/iagod \
+		$(iago_base)/efibootmgr \
 		$(iago_ini) \
 		| $(MINIGZIP) $(ACP) \
 
 	$(hide) rm -rf $(iago_live_ramdisk_root)
 	$(hide) mkdir -p $(iago_live_ramdisk_root)
 	$(hide) $(ACP) -rf $(TARGET_ROOT_OUT)/* $(iago_live_ramdisk_root)
+	$(hide) $(ACP) -f $(iago_base)/efibootmgr $(iago_live_ramdisk_root)/sbin
+	$(hide) $(ACP) -f $(iago_base)/iagod $(iago_live_ramdisk_root)/sbin
+	$(hide) $(ACP) -f $(iago_ini) $(iago_live_ramdisk_root)
 	$(hide) mv $(iago_live_ramdisk_root)/init $(iago_live_ramdisk_root)/init2
 	$(hide) $(ACP) -p $(iago_base)/preinit $(iago_live_ramdisk_root)/init
 	$(hide) mkdir -p $(iago_live_ramdisk_root)/installmedia
@@ -119,12 +148,18 @@ $(iago_nogui_ramdisk): \
 		$(INSTALLED_RAMDISK_TARGET) \
 		$(MKBOOTFS) \
 		$(iago_base)/preinit \
+		$(iago_base)/iagod \
+		$(iago_base)/efibootmgr \
 		$(iago_ini) \
+		$(iago_default_ini) \
 		| $(MINIGZIP) $(ACP) \
 
 	$(hide) rm -rf $(iago_nogui_ramdisk_root)
 	$(hide) mkdir -p $(iago_nogui_ramdisk_root)
 	$(hide) $(ACP) -rf $(TARGET_ROOT_OUT)/* $(iago_nogui_ramdisk_root)
+	$(hide) $(ACP) -f $(iago_base)/efibootmgr $(iago_nogui_ramdisk_root)/sbin
+	$(hide) $(ACP) -f $(iago_base)/iagod $(iago_nogui_ramdisk_root)/sbin
+	$(hide) $(ACP) -f $(iago_ini) $(iago_default_ini) $(iago_nogui_ramdisk_root)
 	$(hide) mv $(iago_nogui_ramdisk_root)/init $(iago_nogui_ramdisk_root)/init2
 	$(hide) $(ACP) -p $(iago_base)/preinit $(iago_nogui_ramdisk_root)/init
 	$(hide) mkdir -p $(iago_nogui_ramdisk_root)/installmedia
@@ -142,7 +177,7 @@ $(iago_live_bootimage): \
 
 	$(hide) $(MKBOOTIMG) --kernel $(INSTALLED_KERNEL_TARGET) \
 			--ramdisk $(iago_live_ramdisk) \
-			--cmdline "$(BOARD_KERNEL_CMDLINE)" \
+			--cmdline "$(BOARD_KERNEL_CMDLINE) androidboot.iago.ini=/iago.ini androidboot.iago.gui=1" \
 			$(BOARD_MKBOOTIMG_ARGS) \
 			--output $@
 
@@ -154,7 +189,7 @@ $(iago_interactive_bootimage): \
 
 	$(hide) $(MKBOOTIMG) --kernel $(INSTALLED_KERNEL_TARGET) \
 			--ramdisk $(iago_nogui_ramdisk) \
-			--cmdline "$(BOARD_KERNEL_CMDLINE) quiet vt.init_hide=0 androidboot.iago.cli=1" \
+			--cmdline "$(BOARD_KERNEL_CMDLINE) quiet vt.init_hide=0 androidboot.iago.ini=/iago.ini androidboot.iago.cli=1" \
 			$(BOARD_MKBOOTIMG_ARGS) \
 			--output $@
 
@@ -166,7 +201,7 @@ $(iago_automated_bootimage): \
 
 	$(hide) $(MKBOOTIMG) --kernel $(INSTALLED_KERNEL_TARGET) \
 			--ramdisk $(iago_nogui_ramdisk) \
-			--cmdline "$(BOARD_KERNEL_CMDLINE) vt.init_hide=0 androidboot.iago.ini=/installmedia/images/iago-default.ini" \
+			--cmdline "$(BOARD_KERNEL_CMDLINE) vt.init_hide=0 androidboot.iago.ini=/iago.ini,/iago-default.ini" \
 			$(BOARD_MKBOOTIMG_ARGS) \
 			--output $@
 
@@ -206,7 +241,7 @@ $(iago_fs_img): \
 		$(iago_images_sfs) \
 		$(iago_loader_configs) \
 		$(iago_efi_bins) \
-		$(LOCAL_PATH)/make_vfatfs \
+		$(LOCAL_PATH)/tools/make_vfatfs \
 		$(LOCAL_PATH)/loader/loader.conf \
 		$(LOCKDOWN_EFI) \
 		| $(ACP) \
@@ -225,7 +260,7 @@ $(iago_fs_img): \
 	$(hide) $(ACP) $(iago_efi_bins) $(iago_efi_dir)
 	$(hide) $(ACP) $(LOCAL_PATH)/loader/loader.conf $(iago_efi_loader)/loader.conf
 	$(hide) $(ACP) -f $(iago_loader_configs) $(iago_efi_loader)/entries/
-	$(hide) $(LOCAL_PATH)/make_vfatfs $(iago_rootfs) $@
+	$(hide) $(LOCAL_PATH)/tools/make_vfatfs $(iago_rootfs) $@
 
 edit_mbr := $(HOST_OUT_EXECUTABLES)/editdisklbl
 

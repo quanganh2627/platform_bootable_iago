@@ -188,7 +188,7 @@ void copy_file(const char *src, const char *dest)
 
 void append_file(const char *src, const char *dest)
 {
-	__dd(src, dest, false, true);
+	__dd(src, dest, true, true);
 }
 
 void mount_partition_device(const char *device, const char *type, char *mountpoint)
@@ -288,6 +288,10 @@ int execute_command(const char *fmt, ...)
 	int ret = -1;
 	va_list ap;
 	char *cmd;
+	struct stat sb;
+
+	if (stat("/system/bin/sh", &sb))
+		die("Shell not available in this context");
 
 	va_start(ap, fmt);
 	if (vasprintf(&cmd, fmt, ap) < 0) {
@@ -311,6 +315,61 @@ out:
 	return ret;
 }
 
+
+/* Adapted from BIONIC implementations of execlp() and system() */
+int execute_command_no_shell(const char *name, const char *arg, ...)
+{
+	va_list ap;
+	char **argv;
+	int n;
+
+	pid_t pid;
+	sig_t intsave, quitsave;
+	sigset_t mask, omask;
+	int pstat;
+
+	/* Construct argv */
+	va_start(ap, arg);
+	n = 1;
+	while (va_arg(ap, char *) != NULL)
+		n++;
+	va_end(ap);
+	argv = alloca((n + 1) * sizeof(*argv));
+	if (argv == NULL) {
+		errno = ENOMEM;
+		return (-1);
+	}
+	va_start(ap, arg);
+	n = 1;
+	argv[0] = (char *)arg;
+	while ((argv[n] = va_arg(ap, char *)) != NULL)
+		n++;
+	va_end(ap);
+
+	/* Fork and exec */
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGCHLD);
+	sigprocmask(SIG_BLOCK, &mask, &omask);
+	switch (pid = vfork()) {
+	case -1:			/* error */
+		sigprocmask(SIG_SETMASK, &omask, NULL);
+		return(-1);
+	case 0:				/* child */
+		sigprocmask(SIG_SETMASK, &omask, NULL);
+		execvp(name, argv);
+		_exit(127);
+	}
+
+	intsave = (sig_t)  bsd_signal(SIGINT, SIG_IGN);
+	quitsave = (sig_t) bsd_signal(SIGQUIT, SIG_IGN);
+	pid = waitpid(pid, (int *)&pstat, 0);
+	sigprocmask(SIG_SETMASK, &omask, NULL);
+	(void)bsd_signal(SIGINT, intsave);
+	(void)bsd_signal(SIGQUIT, quitsave);
+	return (pid == -1 ? -1 : pstat);
+}
+
+
 int execute_command_data(void *data, unsigned sz, const char *fmt, ...)
 {
 	int ret = -1;
@@ -318,6 +377,10 @@ int execute_command_data(void *data, unsigned sz, const char *fmt, ...)
 	char *cmd;
 	FILE *fp;
 	size_t bytes_written;
+	struct stat sb;
+
+	if (stat("/system/bin/sh", &sb))
+		die("Shell not available in this context");
 
 	va_start(ap, fmt);
 	if (vasprintf(&cmd, fmt, ap) < 0) {
@@ -369,6 +432,10 @@ int execute_command_output(void *data, size_t *sz_ptr, const char *fmt, ...)
 	FILE *fp;
 	size_t bytes_read;
 	size_t sz = *sz_ptr;
+	struct stat sb;
+
+	if (stat("/system/bin/sh", &sb))
+		die("Shell not available in this context");
 
 	va_start(ap, fmt);
 	if (vasprintf(&cmd, fmt, ap) < 0) {

@@ -20,10 +20,11 @@
 
 #include <iago.h>
 
-#define IAGO_VERSION	"01.00"
+#define IAGO_VERSION	"01.01"
 
 struct iago_plugin *partitioner_init(void);
 struct iago_plugin *imagewriter_init(void);
 struct iago_plugin *finalizer_init(void);
+struct iago_plugin *ota_init(void);
 
 #endif

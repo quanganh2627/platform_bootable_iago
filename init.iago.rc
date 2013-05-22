@@ -9,7 +9,7 @@ on fs
 on boot
     start iagod
 
-service iagod /installmedia/images/iagod
+service iagod /sbin/iagod
     class iago
     user root
     console

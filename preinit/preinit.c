@@ -331,5 +331,8 @@ int main(void)
     umount("/sys");
 
     /* ok, start the real init */
-    return execl("/init2", "init", NULL);
+    dbg("Installation media mounted, now starting Android init\n");
+    execl("/init2", "init", NULL);
+    KLOG_ERROR("Iago", "Failed to execl() Android init: %s\n", strerror(errno));
+    return EXIT_FAILURE;
 }
