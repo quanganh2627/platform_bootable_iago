@@ -31,7 +31,7 @@ static bool execute_cb(char *entry, int index _unused, void *context _unused)
 	char *type, *src, *device, *prefix, *mode;
 	ssize_t footer;
 	struct stat sb;
-	int count = 20;
+	int count = 90;
 
 	pr_info("Processing %s partition\n", entry);
 
