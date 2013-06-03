@@ -8,7 +8,7 @@ LOCAL_SRC_FILES := main.c \
 		   finalizer.c \
 		   ota.c \
 		   imagewriter.c \
-
+		   newfs_msdos.c \
 
 LOCAL_CFLAGS := -DDEVICE_NAME=\"$(TARGET_BOOTLOADER_BOARD_NAME)\" \
 	-W -Wall -Werror

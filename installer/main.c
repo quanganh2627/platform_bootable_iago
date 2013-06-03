@@ -129,6 +129,8 @@ int main(int argc _unused, char **argv _unused)
 	init_iago_context();
 	cli_mode = (property_get("ro.boot.iago.cli", prop, "") > 0);
 	gui_mode = (property_get("ro.boot.iago.gui", prop, "") > 0);
+	xhashmapPut(ictx.opts, xstrdup(BASE_INTERACTIVE),
+			xasprintf("%d", cli_mode || gui_mode));
 
 	/* Initializes the GPT partition table */
 	add_iago_plugin(partitioner_init());

@@ -27,4 +27,6 @@ struct iago_plugin *imagewriter_init(void);
 struct iago_plugin *finalizer_init(void);
 struct iago_plugin *ota_init(void);
 
+int newfs_msdos_main(int argc, char *argv[]);
+
 #endif

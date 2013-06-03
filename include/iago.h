@@ -112,4 +112,7 @@ void add_iago_plugin(struct iago_plugin *p);
 /* Reboot target after installation is complete, default just boot normally */
 #define BASE_REBOOT		"base:reboot_target"
 
+/* Nonzero if an interactive session */
+#define BASE_INTERACTIVE	"base:interactive_mode"
+
 #endif

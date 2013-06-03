@@ -23,9 +23,6 @@
 #include <iago_util.h>
 #include "iago_private.h"
 
-#define MKDOSFS_BIN		"/system/bin/newfs_msdos"
-
-
 static bool execute_cb(char *entry, int index _unused, void *context _unused)
 {
 	char *type, *src, *device, *prefix, *mode;
@@ -58,11 +55,17 @@ static bool execute_cb(char *entry, int index _unused, void *context _unused)
 				die();
 			}
 		} else if (!strcmp(type, "vfat") || !strcmp(type, "esp")) {
+			char *argv[4];
 			int rv;
-			rv = execute_command(MKDOSFS_BIN " -L %s %s", entry,
-					device);
+
+			argv[0] = "newfs_msdos";
+			argv[1] = "-L";
+			argv[2] = entry;
+			argv[3] = device;
+
+			rv = newfs_msdos_main(4, argv);
 			if (rv) {
-				pr_error(MKDOSFS_BIN " failed: retval=%d\n",
+				pr_error("newfs_msdos failed: retval=%d\n",
 						rv);
 				die();
 			}

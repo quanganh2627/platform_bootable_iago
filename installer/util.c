@@ -50,9 +50,9 @@ void __die(const char *fmt, ...)
 	while (buf[--len] == '\n')
 		buf[len] = 0;
 
-	printf("%s\n", buf);
+	printf("FATAL: ASSERTION FAILED %s\n", buf);
 	property_set("iago.error", buf);
-	LOG_ALWAYS_FATAL("%s", buf);
+	LOG_ALWAYS_FATAL("FATAL: ASSERTION FAILED %s", buf);
 	exit(EXIT_FAILURE); /* shouldn't get here */
 }
 

@@ -277,8 +277,10 @@ static void partitioner_prepare(void)
 	char *disks = xstrdup("");
 	char media[PROPERTY_VALUE_MAX];
 	regex_t diskreg;
+	bool interactive;
 
 	property_get("ro.iago.media", media, "");
+	interactive = atoi(hashmapGetPrintf(ictx.opts, "0", BASE_INTERACTIVE));
 
 	dir = opendir("/sys/block");
 	if (!dir)
@@ -359,24 +361,26 @@ static void partitioner_prepare(void)
 			xhashmapPut(ictx.opts,
 					xasprintf("disk.%s:msdata_size", dp->d_name),
 					xasprintf("%llu", size));
-			ret = get_ntfs_min_size(ms_data_idx, gpt);
-			switch (ret) {
-			case -EINVAL:
-			case -EIO:
-				pr_debug("%s: MS Data partition unreadable",
-						dp->d_name);
-				break;
-			case -EROFS:
-				pr_debug("%s: MS Data partition not resizeable",
-						dp->d_name);
-				// todo communicate this formally to user
-				break;
-			default:
-				pr_debug("%s: MS Data partition resizable to %lld MiB",
-						dp->d_name, to_mib(ret));
-				xhashmapPut(ictx.opts,
-					xasprintf("disk.%s:msdata_minsize", dp->d_name),
-					xasprintf("%llu", ret));
+			if (interactive) {
+				ret = get_ntfs_min_size(ms_data_idx, gpt);
+				switch (ret) {
+				case -EINVAL:
+				case -EIO:
+					pr_debug("%s: MS Data partition unreadable",
+							dp->d_name);
+					break;
+				case -EROFS:
+					pr_debug("%s: MS Data partition not resizeable",
+							dp->d_name);
+					// todo communicate this formally to user
+					break;
+				default:
+					pr_debug("%s: MS Data partition resizable to %lld MiB",
+							dp->d_name, to_mib(ret));
+					xhashmapPut(ictx.opts,
+						xasprintf("disk.%s:msdata_minsize", dp->d_name),
+						xasprintf("%llu", ret));
+				}
 			}
 		} else
 			pr_debug("%s: No Windows installation found\n", dp->d_name);
