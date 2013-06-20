@@ -19,6 +19,9 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <sys/vt.h>
+#include "linux/tiocl.h"
 
 #include <cutils/properties.h>
 #include <cutils/android_reboot.h>
@@ -112,6 +115,14 @@ int main(int argc _unused, char **argv _unused)
 	char prop[PROPERTY_VALUE_MAX];
 	char *reboot_target;
 	bool cli_mode, gui_mode;
+
+	/* Redirect kernel messages to /dev/tty2 */
+	char bytes[2] = {TIOCL_SETKMSGREDIRECT, 2};
+	int fd_cons = open("/dev/tty2", O_RDWR);
+	int ierr = 0;
+	if ((ierr = ioctl(fd_cons, TIOCLINUX, bytes)) < 0) {
+		pr_error("could not redirect kernel messages do /dev/tty2\n");
+	}
 
 	pr_info("iago daemon " IAGO_VERSION " starting\n");
 	umask(066);
