@@ -689,6 +689,17 @@ struct mkpart_ctx {
 };
 
 
+static char *get_device_node(struct gpt *gpt, int index)
+{
+	char *node;
+
+	node = gpt_get_device_node(index, gpt);
+	if (!node)
+		die("gpt_get_device_node");
+	return node;
+}
+
+
 static bool mkpart_cb(char *entry, int index _unused, void *context)
 {
 	struct mkpart_ctx *mc = context;
@@ -728,7 +739,7 @@ static bool mkpart_cb(char *entry, int index _unused, void *context)
 	xhashmapPut(ictx.opts, xasprintf("partition.%s:index", entry),
 			xasprintf("%d", mc->ptn_index));
 	xhashmapPut(ictx.opts, xasprintf("partition.%s:device", entry),
-			xasprintf("/dev/block/by-name/%s", entry));
+			get_device_node(mc->gpt, mc->ptn_index));
 	return true;
 }
 
@@ -824,7 +835,7 @@ struct gpt *execute_dual_boot(char *disk, char *partlist, char *device)
 	xhashmapPut(ictx.opts, xstrdup("partition.bootloader:index"),
 			xasprintf("%u", esp_index));
 	xhashmapPut(ictx.opts, xstrdup("partition.bootloader:device"),
-			xstrdup("/dev/block/by-name/bootloader"));
+			get_device_node(gpt, esp_index));
 	create_android_partitions(esp_size, partlist, gpt, true);
 	name = gpt_name("bootloader");
 	esp = gpt_entry_get(esp_index, gpt);
