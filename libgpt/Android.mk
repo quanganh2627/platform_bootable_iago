@@ -27,7 +27,7 @@ include $(BUILD_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES := gptdump.c
 LOCAL_MODULE := gptdump
-LOCAL_MODULE_TAGS := eng
+LOCAL_MODULE_TAGS := optional
 LOCAL_CFLAGS := -Wall -Werror
 LOCAL_C_INCLUDES := bootable/iago/include
 LOCAL_SHARED_LIBRARIES := libgpt
