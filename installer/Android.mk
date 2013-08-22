@@ -28,6 +28,7 @@ LOCAL_STATIC_LIBRARIES := libiniparser \
 			  libsparse_static \
 			  libext4_utils_static \
 			  libz \
+			  libselinux \
 			  $(plugin_lib_names) \
 			  $(TARGET_IAGO_EXTRA_LIBS) \
 

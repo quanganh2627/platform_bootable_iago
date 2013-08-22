@@ -30,7 +30,7 @@
 #include <zlib.h>
 #include <cutils/android_reboot.h>
 #include <cutils/properties.h>
-#include <make_ext4fs.h>
+#include <ext4_utils.h>
 
 #include <iago.h>
 #include <iago_util.h>
@@ -936,6 +936,9 @@ void xclose(int fd)
 		die_errno("close");
 }
 
+/* ext4_utils APIs are HORRIBLE */
+extern void reset_ext4fs_info();
+
 int make_ext4fs_nowipe(const char *filename, int64_t len,
                 char *mountpoint, struct selabel_handle *sehnd)
 {
@@ -946,7 +949,9 @@ int make_ext4fs_nowipe(const char *filename, int64_t len,
 	info.len = len;
 
 	fd = xopen(filename, O_WRONLY);
-	status = make_ext4fs_internal(fd, NULL, mountpoint, NULL, 0, 0, 0, 0, 0, sehnd);
+        /* We use internal variant so we can format without doing a slow
+         * block-level wipe */
+	status = make_ext4fs_internal(fd, NULL, mountpoint, NULL, 0, 0, 0, 0, sehnd, 0);
 	xclose(fd);
 
 	return status;

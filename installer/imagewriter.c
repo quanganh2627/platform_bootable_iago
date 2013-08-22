@@ -49,7 +49,7 @@ static bool execute_cb(char *entry, int index _unused, void *context _unused)
 		if (!strcmp(type, "ext4")) {
 			footer = xatol(hashmapGetPrintf(ictx.opts, "0",
 						"%s:footer", prefix));
-			pr_debug("make_ext4fs(%s, %ld, %s)", device, 0 - footer, entry);
+			pr_debug("make_ext4fs(%s, %zd, %s)", device, 0 - footer, entry);
 			if (make_ext4fs_nowipe(device, 0 - footer, entry, sehandle)) {
 			        pr_error("make_ext4fs failed\n");
 				die();
