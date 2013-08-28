@@ -20,6 +20,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#define _REALLY_INCLUDE_SYS__SYSTEM_PROPERTIES_H_
+#include <sys/_system_properties.h>
+
 #include <iago.h>
 #include <iago_util.h>
 #include "iago_private.h"
@@ -44,7 +47,7 @@ static void write_install_props(void)
 {
 	int propsfd;
 
-	propsfd = xopen("/mnt/install/install.prop", O_WRONLY | O_CREAT);
+	propsfd = xopen("/mnt/" PROP_PATH_FACTORY, O_WRONLY | O_CREAT);
 	hashmapForEach(ictx.iprops, write_props_cb, (void *)propsfd);
 	xclose(propsfd);
 }
@@ -55,12 +58,12 @@ static void finalizer_execute(void)
 	char *device, *type;
 
 	pr_info("Finalizing installation...");
-	device = hashmapGetPrintf(ictx.opts, NULL, "partition.install:device");
-	type = hashmapGetPrintf(ictx.opts, NULL, "partition.install:type");
+	device = hashmapGetPrintf(ictx.opts, NULL, "partition.factory:device");
+	type = hashmapGetPrintf(ictx.opts, NULL, "partition.factory:type");
 
-	mount_partition_device(device, type, "/mnt/install");
+	mount_partition_device(device, type, "/mnt/factory");
 	write_install_props();
-	umount("/mnt/install");
+	umount("/mnt/factory");
 
 	/* Just for info */
 	pr_info("androidboot.install_id=%s", hashmapGetPrintf(ictx.opts,
