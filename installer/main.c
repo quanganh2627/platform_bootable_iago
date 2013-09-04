@@ -35,6 +35,8 @@
 struct iago_context ictx;
 struct selabel_handle *sehandle;
 
+/* To be implemented later */
+#define GUI_SUPPORT 0
 
 static void init_iago_context(void)
 {
@@ -173,6 +175,7 @@ int main(int argc _unused, char **argv _unused)
 		 * if specified */
 		cli_phase();
 	} else if (gui_mode) {
+#if GUI_SUPPORT
 		/* TODO this isn't fully implemented */
 		//write_opts(ictx.opts, "/data/iago-prepare.ini");
 		hashmap_destroy(ictx.opts);
@@ -188,6 +191,9 @@ int main(int argc _unused, char **argv _unused)
 			load_ini_file(prop);
 		else
 			die("Couldn't get configuration from interactive installer!\n");
+#else
+		die("Iago does not support GUI mode\n");
+#endif
 	}
 
 	hashmap_dump(ictx.opts);
