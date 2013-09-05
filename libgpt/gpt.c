@@ -283,7 +283,7 @@ char *gpt_get_device_node(unsigned int gpt_index, struct gpt *gpt)
 {
 	char *ret;
 	int rv;
-	if (isdigit(gpt->device[strlen(gpt->device) - 2]))
+	if (isdigit(gpt->device[strlen(gpt->device) - 1]))
 		rv = asprintf(&ret, "%sp%d", gpt->device, gpt_index);
 	else
 		rv = asprintf(&ret, "%s%d", gpt->device, gpt_index);
