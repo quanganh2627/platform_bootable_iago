@@ -108,6 +108,20 @@ int delete_cb(const char *fpath, const struct stat *sb _unused,
 }
 
 
+void clean_pstore(void)
+{
+	/* If there is too much crash dump junk in the pstore,
+	 * efibootmgr will fail */
+	xmkdir("/pstore", 0777);
+	if (mount("pstore", "/pstore", "pstore", 0, NULL)) {
+		pr_info("Couldn't mount pstore, is CONFIG_PSTORE enabled?");
+		return;
+	}
+	nftw("/pstore", delete_cb, 64, FTW_DEPTH | FTW_PHYS);
+	umount("/pstore");
+}
+
+
 static void gummiboot_execute(void)
 {
 	char *device;
@@ -145,6 +159,7 @@ static void gummiboot_execute(void)
 	string_list_iterate(bootimages, bootimage_cb, (void*)fd);
 
 	device = xasprintf("/dev/block/%s", hashmapGetPrintf(ictx.opts, NULL, BASE_INSTALL_DISK));
+	clean_pstore();
 	ret = execute_command_no_shell("/sbin/efibootmgr",
 			"efibootmgr", "-c", "-d", device, "-l", "\\shim.efi",
 			"-v", "-p", hashmapGetPrintf(ictx.opts, NULL, "partition.bootloader:index"),
