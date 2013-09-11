@@ -906,7 +906,13 @@ static void partitioner_execute(void)
 	}
 	buf = gpt_dump_pentries(gpt);
 	if (buf) {
-		pr_debug("%s", buf);
+		char *buf2, *line;
+		for (buf2 = buf; ; buf2 = NULL) {
+			line = strtok(buf2, "\n");
+			if (!line)
+				break;
+			pr_debug("%s", line);
+		}
 		free(buf);
 	}
 
