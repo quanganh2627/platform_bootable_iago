@@ -1,3 +1,5 @@
+TARGET_NO_KERNEL := false
+TARGET_NO_BOOTLOADER := false
 
 # Command line tools needed by Iago installer
 PRODUCT_PACKAGES += \
@@ -6,4 +8,5 @@ PRODUCT_PACKAGES += \
 	tune2fs \
 	ntfsresize \
 	iagod \
+	efibootmgr \
 
