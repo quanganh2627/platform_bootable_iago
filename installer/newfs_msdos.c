@@ -366,7 +366,7 @@ newfs_msdos_main(int argc, char *argv[])
     if (!opt_create && !strchr(fname, '/')) {
 	snprintf(buf, sizeof(buf), "%s%s", _PATH_DEV, fname);
 	if (!(fname = strdup(buf)))
-	    err(1, NULL);
+	    err(1, "strdup");
     }
     dtype = *argv;
     if (opt_create) {
@@ -499,7 +499,7 @@ newfs_msdos_main(int argc, char *argv[])
 	if (!strchr(bname, '/')) {
 	    snprintf(buf, sizeof(buf), "/boot/%s", bname);
 	    if (!(bname = strdup(buf)))
-		err(1, NULL);
+		err(1, "strdup");
 	}
 	if ((fd1 = open(bname, O_RDONLY)) == -1 || fstat(fd1, &sb))
 	    err(1, "%s", bname);
@@ -617,7 +617,7 @@ newfs_msdos_main(int argc, char *argv[])
 	now = tv.tv_sec;
 	tm = localtime(&now);
 	if (!(img = malloc(bpb.bps)))
-	    err(1, NULL);
+	    err(1, "strdup");
 	dir = bpb.res + (bpb.spf ? bpb.spf : bpb.bspf) * bpb.nft;
 	for (lsn = 0; lsn < dir + (fat == 32 ? bpb.spc : rds); lsn++) {
 	    x = lsn;
