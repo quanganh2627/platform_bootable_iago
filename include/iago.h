@@ -106,13 +106,14 @@ void add_iago_plugin(struct iago_plugin *p);
 /* Name of the bootloader plug-in in use, if any */
 #define BASE_BOOTLOADER		"base:bootloader"
 
-/* Installation ID, used by Android to look up partitions in the GPT */
-#define INSTALL_ID		"base:install_id"
-
 /* Reboot target after installation is complete, default just boot normally */
 #define BASE_REBOOT		"base:reboot_target"
 
 /* Nonzero if an interactive session */
 #define BASE_INTERACTIVE	"base:interactive_mode"
+
+/* Detected bus controller, for by-name symlinks. Should set
+ * androidboot.disk to this value */
+#define DISK_BUS_NAME		"base:disk_bus"
 
 #endif

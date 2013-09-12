@@ -55,7 +55,7 @@ static void write_install_props(void)
 
 static void finalizer_execute(void)
 {
-	char *device, *type;
+	char *device, *type, *bus;
 
 	pr_info("Finalizing installation...");
 	device = hashmapGetPrintf(ictx.opts, NULL, "partition.factory:device");
@@ -64,10 +64,11 @@ static void finalizer_execute(void)
 	mount_partition_device(device, type, "/mnt/factory");
 	write_install_props();
 	umount("/mnt/factory");
+	bus = hashmapGetPrintf(ictx.opts, NULL, DISK_BUS_NAME);
 
 	/* Just for info */
-	pr_info("androidboot.install_id=%s", hashmapGetPrintf(ictx.opts,
-				NULL, INSTALL_ID));
+	if (bus)
+		pr_info("androidboot.disk=%s", bus);
 }
 
 

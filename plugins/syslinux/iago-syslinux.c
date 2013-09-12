@@ -68,7 +68,7 @@ void syslinux_cli(void)
 static bool bootimage_cb(char *entry, int index _unused, void *context)
 {
 	int fd = (int)context;
-	char *disk, *description, *prefix;
+	char *disk, *description, *prefix, *bus;
 
 	prefix = xasprintf("partition.%s", entry);
 
@@ -79,8 +79,11 @@ static bool bootimage_cb(char *entry, int index _unused, void *context)
 	put_string(fd, "    com32 android.c32\n");
 	disk = hashmapGetPrintf(ictx.opts, NULL,
 			"%s:index", prefix);
-	put_string(fd, "    append current %s androidboot.install_id=%s\n",
-			disk, hashmapGetPrintf(ictx.opts, "", INSTALL_ID));
+	put_string(fd, "    append current %s", disk);
+	bus = hashmapGetPrintf(ictx.opts, NULL, DISK_BUS_NAME);
+	if (bus)
+		put_string(fd, " androidboot.disk=%s", bus);
+	put_string(fd, "\n");
 	return true;
 }
 

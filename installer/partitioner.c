@@ -36,7 +36,7 @@
 
 #include "iago_private.h"
 
-#define NAME_MAGIC	"ANDROID!"
+#define NAME_MAGIC	"android_"
 #define MIN_DATA_PART_SIZE	350 /* CDD section 7.6.1 */
 
 
@@ -77,40 +77,9 @@ static uint64_t to_mib_floor(uint64_t val)
 }
 
 
-static char *get_install_id(void)
-{
-	char buf[PROPERTY_VALUE_MAX];
-	int ret;
-
-	ret = property_get("ro.boot.install_id", buf, NULL);
-	if (ret <= 0)
-		return NULL;
-	return xstrdup(buf);
-}
-
-
 static uint64_t mib_to_lba(struct gpt *gpt, uint64_t mib)
 {
 	return (mib << 20) / gpt->lba_size;
-}
-
-
-static void set_install_id(void)
-{
-	int fd;
-	char *install_id_str = get_install_id();
-
-	if (!install_id_str) {
-		uint32_t install_id;
-		fd = xopen("/dev/urandom", O_RDONLY);
-		xread(fd, &install_id, sizeof(install_id));
-		xclose(fd);
-		install_id_str = xasprintf("%s%08X", NAME_MAGIC, install_id);
-		if (property_set("ro.boot.install_id", install_id_str))
-			die("Unable to set ro.boot.install_id");
-	}
-	xhashmapPut(ictx.opts, xstrdup(INSTALL_ID),
-			install_id_str);
 }
 
 
@@ -146,7 +115,7 @@ static uint64_t check_for_android(struct gpt *gpt)
 		bool c = false;
 		if (strncmp(name, NAME_MAGIC, 8))
 			c = true;
-		if (strlen(name) == 26 && !strcmp(name + 16, "bootloader"))
+		if (strlen(name) == 18 && !strcmp(name + 8, "bootloader"))
 			c = true; /* skip the ESP */
 		free(name);
 		if (c)
@@ -605,18 +574,6 @@ static void partitioner_cli(void)
 }
 
 
-static char *gpt_name(const char *name)
-{
-	char *ret, *install_id;
-
-	install_id = get_install_id();
-	ret = xasprintf("%s%s", install_id, name);
-	free(install_id);
-	return ret;
-}
-
-
-
 static bool flags_cb(char *flag, int _unused index, void *context)
 {
 	uint64_t *flags_ptr = context;
@@ -704,8 +661,7 @@ static bool mkpart_cb(char *entry, int index _unused, void *context)
 {
 	struct mkpart_ctx *mc = context;
 	char *flags_list;
-	char *ptype;
-	char *name;
+	char *ptype, *pname;
 	int64_t part_mb;
 	uint64_t flags;
 
@@ -725,15 +681,14 @@ static bool mkpart_cb(char *entry, int index _unused, void *context)
 	if (part_mb < 0)
 		part_mb = mc->disk_mb - mc->ptn_mb;
 
-	name = gpt_name(entry);
-
-	mc->ptn_index = gpt_entry_create(mc->gpt, name, string_to_type(ptype),
+	pname = xasprintf(NAME_MAGIC "%s", entry);
+	mc->ptn_index = gpt_entry_create(mc->gpt, pname, string_to_type(ptype),
 			flags, mib_to_lba(mc->gpt, mc->next_mb),
 			mib_to_lba(mc->gpt, mc->next_mb + part_mb) - 1);
+	free(pname);
 	if (mc->ptn_index == 0)
-		die("failure creating new partition\n");
+		die("failure creating new %s partition\n", entry);
 
-	free(name);
 	mc->next_mb += part_mb;
 
 	xhashmapPut(ictx.opts, xasprintf("partition.%s:index", entry),
@@ -788,7 +743,6 @@ struct gpt *execute_dual_boot(char *disk, char *partlist, char *device)
 {
 	uint64_t esp_size, win_resize;
 	uint32_t esp_index, win_index;
-	char *name;
 	struct gpt *gpt;
 	struct gpt_entry *esp;
 
@@ -806,7 +760,7 @@ struct gpt *execute_dual_boot(char *disk, char *partlist, char *device)
 				"disk.%s:msdata_index", disk));
 
 	if (!esp_index) {
-		pr_info("Existing EFI system partition not found.");
+		pr_info("Existing EFI system partition not found on disk %s.", disk);
 		die("Please use the interactive installer to re-partition the disk.");
 	}
 
@@ -837,13 +791,11 @@ struct gpt *execute_dual_boot(char *disk, char *partlist, char *device)
 	xhashmapPut(ictx.opts, xstrdup("partition.bootloader:device"),
 			get_device_node(gpt, esp_index));
 	create_android_partitions(esp_size, partlist, gpt, true);
-	name = gpt_name("bootloader");
 	esp = gpt_entry_get(esp_index, gpt);
 	if (!esp)
 		die("couldn't reference ESP");
-	if (gpt_entry_set_name(esp, name))
-		die("failure setting partition name to '%s'", name);
-	free(name);
+	if (gpt_entry_set_name(esp, NAME_MAGIC "bootloader"))
+		die("failure setting partition name to 'bootloader'");
 	return gpt;
 }
 
@@ -880,9 +832,52 @@ static bool getguid_cb(char *entry, int list_index _unused, void *context)
 }
 
 
+static char *get_bus_name(char *disk)
+{
+	char buf[PATH_MAX];
+	char *syspath;
+	char *pos, *end, *ret;
+
+	syspath = xasprintf("/sys/block/%s", disk);
+	if (readlink(syspath, buf, sizeof(buf)) < 0)
+		die_errno("readlink");
+	buf[sizeof(buf) - 1] = '\0';
+
+	pos = buf + 11; /* Skip over '../devices/' */
+	if (!strncmp(pos, "pci", 3)) {
+		/* PCI devices. We need 2 directory levels */
+		end = strchr(pos, '/');
+		if (!end)
+			goto out_error;
+		end = strchr(end + 1, '/');
+		if (!end)
+			goto out_error;
+	} else if (!strncmp(pos, "platform/", 9)) {
+		/* Platform block devices, we want the dirname after 'platform' */
+		pos += 9; /* skip over 'platform/' */
+		end = strchr(pos, '/');
+		if (!end)
+			goto out_error;
+	} else {
+		goto out_error;
+	}
+
+	ret = xmalloc(end - pos + 1);
+	strncpy(ret, pos, end - pos);
+	ret[end - pos] = '\0';
+	return ret;
+
+out_error:
+	pr_error("I don't know how to handle disk %s device path '%s'", disk, buf);
+	pr_error("You will need to set androidboot.disk in your kernel command line manually");
+	return NULL;
+
+}
+
+
 static void partitioner_execute(void)
 {
-	char *disk, *device, *partlist, *buf;
+	char *disk, *device, *partlist, *buf, *bus;
 	bool dualboot;
 	struct gpt *gpt;
 
@@ -892,7 +887,6 @@ static void partitioner_execute(void)
 	device = xasprintf("/dev/block/%s", disk);
 	dualboot = xatol(hashmapGetPrintf(ictx.opts, "0",
 				"base:dualboot"));
-	set_install_id();
 	if (dualboot) {
 		gpt = execute_dual_boot(disk, partlist, device);
 	} else {
@@ -923,6 +917,13 @@ static void partitioner_execute(void)
 	gpt_close(gpt);
 	gpt_sync_ptable(device);
 	free(device);
+
+	bus = get_bus_name(disk);
+	if (bus) {
+		pr_info("Detected bus controller '%s'", bus);
+		/* ictx.opts take over ownership of the string */
+		xhashmapPut(ictx.opts, xstrdup(DISK_BUS_NAME), bus);
+	}
 	pr_debug("Partitioner execution phase complete");
 }
 
