@@ -841,7 +841,7 @@ again:
 	if (buf[0] != '\n')
 		select = atoi(buf);
 
-	if (select >= i) {
+	if (select > i) {
 		fprintf(stdout, "Invalid selection\n");
 		goto again;
 	}
