@@ -62,7 +62,7 @@ static const struct guid ms_data_ptn = GPT_GUID(0xEBD0A0A2, 0xB9E5, 0x4433,
 static const struct guid linux_ptn = GPT_GUID(0x0FC63DAF, 0x8483, 0x4772,
 		0x8E79, 0x3D69D8477DE4ULL);
 
-/* These two aren't defined anywhere so I generated them */
+/* These aren't defined anywhere so I generated them */
 static const struct guid android_boot = GPT_GUID(0x49a4d17f, 0x93a3, 0x45c1,
 		0xa0de, 0xf50b2ebe2599ULL);
 
@@ -74,6 +74,9 @@ static const struct guid android_tertiary = GPT_GUID(0x767941d0, 0x2085, 0x11e3,
 
 static const struct guid android_misc = GPT_GUID(0xef32a33b, 0xa409, 0x486c,
 		0x9141, 0x9ffb711f6266ULL);
+
+static const struct guid android_metadata = GPT_GUID(0x20ac26be, 0x20b7, 0x11e3,
+		0x84c5, 0x6cfdb94711e9ULL);
 
 struct mbr_chs {
 	uint8_t head;
@@ -117,6 +120,8 @@ const struct guid *get_guid_type(enum part_type t)
 		return &android_recovery;
 	case PART_ANDROID_TERTIARY:
 		return &android_tertiary;
+	case PART_ANDROID_METADATA:
+		return &android_metadata;
 	default:
 		return NULL;
 	}

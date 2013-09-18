@@ -621,6 +621,8 @@ static enum part_type string_to_type(char *type)
 		return PART_ANDROID_TERTIARY;
 	else if (!strcmp(type, "misc"))
 		return PART_ANDROID_MISC;
+	else if (!strcmp(type, "metadata"))
+		return PART_ANDROID_METADATA;
 	else if (!strcmp(type, "ext4"))
 		return PART_LINUX;
 	else if (!strcmp(type, "vfat")) {
