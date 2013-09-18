@@ -138,6 +138,8 @@ int gpt_find_contiguous_free_space(struct gpt *gpt, uint64_t *start_lba,
 enum part_type {
 	PART_LINUX,
 	PART_ANDROID_BOOT,
+	PART_ANDROID_RECOVERY,
+	PART_ANDROID_TERTIARY,
 	PART_ANDROID_MISC,
 	PART_MS_DATA,
 	PART_MS_RESERVED,

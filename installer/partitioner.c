@@ -615,6 +615,10 @@ static enum part_type string_to_type(char *type)
 		return PART_ESP;
 	else if (!strcmp(type, "boot"))
 		return PART_ANDROID_BOOT;
+	else if (!strcmp(type, "recovery"))
+		return PART_ANDROID_RECOVERY;
+	else if (!strcmp(type, "tertiary"))
+		return PART_ANDROID_TERTIARY;
 	else if (!strcmp(type, "misc"))
 		return PART_ANDROID_MISC;
 	else if (!strcmp(type, "ext4"))

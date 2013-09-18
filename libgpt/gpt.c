@@ -66,6 +66,12 @@ static const struct guid linux_ptn = GPT_GUID(0x0FC63DAF, 0x8483, 0x4772,
 static const struct guid android_boot = GPT_GUID(0x49a4d17f, 0x93a3, 0x45c1,
 		0xa0de, 0xf50b2ebe2599ULL);
 
+static const struct guid android_recovery = GPT_GUID(0x4177c722, 0x9e92, 0x4aab,
+		0x8644, 0x43502bfd5506ULL);
+
+static const struct guid android_tertiary = GPT_GUID(0x767941d0, 0x2085, 0x11e3,
+		0xad3b, 0x6cfdb94711e9ULL);
+
 static const struct guid android_misc = GPT_GUID(0xef32a33b, 0xa409, 0x486c,
 		0x9141, 0x9ffb711f6266ULL);
 
@@ -107,6 +113,10 @@ const struct guid *get_guid_type(enum part_type t)
 		return &android_boot;
 	case PART_ANDROID_MISC:
 		return &android_misc;
+	case PART_ANDROID_RECOVERY:
+		return &android_recovery;
+	case PART_ANDROID_TERTIARY:
+		return &android_tertiary;
 	default:
 		return NULL;
 	}
