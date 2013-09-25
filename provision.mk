@@ -20,5 +20,6 @@ $(BUILT_PROVISIONING_IMAGE): \
 
 .PHONY: provimg
 provimg: $(BUILT_PROVISIONING_IMAGE)
+$(call dist-for-goals,provimg,$(BUILT_PROVISIONING_IMAGE))
 
 endif

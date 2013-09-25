@@ -48,6 +48,7 @@ import os
 import subprocess
 import tempfile
 import shutil
+import zipfile
 
 outdir = os.environ["ANDROID_PRODUCT_OUT"]
 hostdir = os.environ["ANDROID_HOST_OUT"]
@@ -136,20 +137,27 @@ def main(argv):
     shutil.copytree(os.path.join(OPTIONS.input_tmp, "BOOT"),
                     os.path.join(boot_root, "PROVISION"))
 
+    # Extract the miscellaneous files we need from the iago provision zip in RADIO/
+    prov_root = tempfile.mkdtemp(prefix="iago-prov-files-")
+    OPTIONS.tempfiles.append(prov_root)
+    pz = zipfile.ZipFile(os.path.join(OPTIONS.input_tmp,"RADIO/iago_provision_files.zip"))
+    pz.extractall(prov_root)
+    pz.close()
+
     # Copy Android init as init2 and preinit as init, replace init.rc
     shutil.copyfile(os.path.join(ramdisk_root, "init"),
                     os.path.join(ramdisk_root, "init2"))
-    shutil.copyfile(os.path.join(OPTIONS.input_tmp, "RADIO/preinit"),
+    shutil.copyfile(os.path.join(prov_root, "preinit"),
                     os.path.join(ramdisk_root, "init"))
-    shutil.copyfile(os.path.join(OPTIONS.input_tmp, "RADIO/init.provision.rc"),
+    shutil.copyfile(os.path.join(prov_root, "init.provision.rc"),
                     os.path.join(ramdisk_root, "init.rc"))
 
     # Copy other files unique to provisioning ramdisk out of RADIO/
     for fn in ["iago.ini", "iago-default.ini", "iago-provision.ini"]:
-        shutil.copyfile(os.path.join(OPTIONS.input_tmp, "RADIO", fn),
+        shutil.copyfile(os.path.join(prov_root, fn),
                 os.path.join(ramdisk_root, fn))
     for fn in ["iagod", "efibootmgr"]:
-        shutil.copyfile(os.path.join(OPTIONS.input_tmp, "RADIO", fn),
+        shutil.copyfile(os.path.join(prov_root, fn),
                 os.path.join(ramdisk_root, "sbin", fn))
 
     # Create some required empty directories
@@ -190,18 +198,25 @@ def main(argv):
     lc.close()
 
     # Copy all the signed EFI binaries
-    efidir = os.path.join(OPTIONS.input_tmp, "EFI")
+    efidir = os.path.join(OPTIONS.input_tmp, "RADIO")
     for fname in os.listdir(efidir):
+        if not fname.endswith(".efi"):
+            continue
         absfname = os.path.join(efidir, fname)
         if os.path.isfile(absfname):
             if OPTIONS.verbose:
-                print "  copying %s --> %s" % (absfname, imagesdir)
+                print "  copying EFI Binary %s --> %s" % (absfname, imagesdir)
             shutil.copy(absfname, imagesdir)
     bootdir = os.path.join(output_root, "EFI/BOOT")
     os.makedirs(bootdir)
-    # FIXME 32-bit support
+
+    # HACK just copy the shim to both names, we have no plans to support
+    # multiple kernel arches in the same binary image anyway
     shutil.copyfile(os.path.join(efidir, "shim.efi"),
-                os.path.join(bootdir, "BOOTX64.EFI"))
+                    os.path.join(bootdir, "BOOTX64.EFI"))
+    shutil.copyfile(os.path.join(efidir, "shim.efi"),
+                    os.path.join(bootdir, "BOOTIA32.EFI"))
+
     for fn in ["gummiboot.efi", "MokManager.efi"]:
         shutil.copyfile(os.path.join(efidir, fn),
                     os.path.join(bootdir, fn))

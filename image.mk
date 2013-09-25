@@ -6,6 +6,7 @@ iago_base := $(PRODUCT_OUT)/iago
 iago_live_ramdisk_root := $(iago_base)/ramdisk_live
 iago_nogui_ramdisk_root := $(iago_base)/ramdisk_nogui
 iago_rootfs := $(iago_base)/root
+iago_provision := $(iago_base)/provision_files
 iago_nogui_ramdisk := $(iago_base)/ramdisk_live.img
 iago_live_ramdisk := $(iago_base)/ramdisk_nogui.img
 iago_images_root := $(iago_base)/images
@@ -84,17 +85,34 @@ $(iago_provision_ini): \
 	$(hide) mkdir -p $(dir $@)
 	$(hide) cat $^ > $@
 
+iago_efi_bins := \
+	$(GUMMIBOOT_EFI) \
+	$(UEFI_SHIM_EFI) \
+	$(LOCKDOWN_EFI)
+ifneq ($(TARGET_USE_MOKMANAGER),false)
+iago_loader_configs += $(iago_base)/4mokmanager.conf
+iago_efi_bins += $(MOKMANAGER_EFI)
+endif
+
 # These all need to go in the target-files-package, as those are used to construct
 # provisioning images.
-INSTALLED_RADIOIMAGE_TARGET += \
-			$(iago_ini) \
-			$(iago_default_ini) \
-			$(iago_provision_ini) \
-			$(iago_base)/preinit \
-			$(iago_base)/iagod \
-			$(iago_base)/efibootmgr \
-			bootable/iago/init.provision.rc \
-			bootable/iago/live_img_layout.conf \
+iago_radio_zip := $(iago_base)/iago_provision_files.zip
+$(iago_radio_zip): \
+		$(iago_ini) \
+		$(iago_default_ini) \
+		$(iago_provision_ini) \
+		$(iago_base)/preinit \
+		$(iago_base)/iagod \
+		$(iago_base)/efibootmgr \
+		bootable/iago/init.provision.rc \
+		bootable/iago/live_img_layout.conf \
+		| $(ACP)
+	$(hide) rm -rf $(iago_provision)
+	$(hide) mkdir -p $(iago_provision)
+	$(hide) $(ACP) $^ $(iago_provision)
+	$(hide) zip -j $@ $(iago_provision)/*
+
+INSTALLED_RADIOIMAGE_TARGET += $(iago_radio_zip) $(iago_efi_bins)
 
 $(iago_images_sfs): \
 		$(IAGO_IMAGES_DEPS) \
@@ -217,16 +235,6 @@ iago_loader_configs := \
 	$(iago_base)/2interactive.conf \
 	$(iago_base)/3secureboot.conf \
 
-iago_efi_bins := \
-	$(GUMMIBOOT_EFI) \
-	$(UEFI_SHIM_EFI) \
-	$(LOCKDOWN_EFI) \
-
-ifneq ($(TARGET_USE_MOKMANAGER),false)
-iago_loader_configs += $(iago_base)/4mokmanager.conf
-iago_efi_bins += $(MOKMANAGER_EFI)
-endif
-
 $(iago_base)/%.conf: $(LOCAL_PATH)/loader/%.conf.in
 	$(hide) mkdir -p $(iago_base)
 	$(hide) sed "s|CMDLINE|$(BOARD_KERNEL_CMDLINE)|" $^ > $@
@@ -279,6 +287,7 @@ $(iago_img): \
 
 .PHONY: liveimg
 liveimg: $(iago_img)
+$(call dist-for-goals,liveimg,$(iago_img))
 
 # The following rules are for constructing an Iago image which boots in
 # legacy mode. You CANNOT perform EFI installations even if you use an
@@ -326,5 +335,6 @@ $(iago_legacy_image): \
 
 .PHONY: legacyimg
 legacyimg: $(iago_legacy_image)
+$(call dist-for-goals,legacyimg,$(iago_legacy_image))
 
 endif # TARGET_USE_IAGO
