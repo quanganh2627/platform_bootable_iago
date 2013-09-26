@@ -20,7 +20,7 @@
 
 static struct iago_plugin plugin;
 
-struct iago_plugin *droidboot_init(void)
+struct iago_plugin *userfastboot_init(void)
 {
 	return &plugin;
 }
