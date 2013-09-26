@@ -89,8 +89,8 @@ iago_efi_bins := \
 	$(GUMMIBOOT_EFI) \
 	$(UEFI_SHIM_EFI) \
 	$(LOCKDOWN_EFI)
+
 ifneq ($(TARGET_USE_MOKMANAGER),false)
-iago_loader_configs += $(iago_base)/4mokmanager.conf
 iago_efi_bins += $(MOKMANAGER_EFI)
 endif
 
@@ -233,7 +233,11 @@ iago_loader_configs := \
 	$(iago_base)/0live.conf \
         $(iago_base)/1install.conf \
 	$(iago_base)/2interactive.conf \
-	$(iago_base)/3secureboot.conf \
+	$(iago_base)/3secureboot.conf
+
+ifneq ($(TARGET_USE_MOKMANAGER),false)
+iago_loader_configs += $(iago_base)/4mokmanager.conf
+endif
 
 $(iago_base)/%.conf: $(LOCAL_PATH)/loader/%.conf.in
 	$(hide) mkdir -p $(iago_base)
