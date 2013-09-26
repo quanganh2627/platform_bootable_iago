@@ -225,7 +225,7 @@ static void delete_android(struct gpt *gpt)
 
 		if (strncmp(name, NAME_MAGIC, 8))
 			c = true;
-		if (strlen(name) == 26 && !strcmp(name + 16, "bootloader"))
+		if (strlen(name) == 18 && !strcmp(name + 8, "bootloader"))
 			c = true;
 		free(name);
 		if (c)
