@@ -20,6 +20,8 @@ $(BUILT_PROVISIONING_IMAGE): \
 
 .PHONY: provimg
 provimg: $(BUILT_PROVISIONING_IMAGE)
-$(call dist-for-goals,provimg,$(BUILT_PROVISIONING_IMAGE))
+
+# Put provision.img in out/dist when 'make dist' is run
+$(call dist-for-goals,droidcore,$(BUILT_PROVISIONING_IMAGE):$(TARGET_PRODUCT)-provision-$(FILE_NAME_TAG).img)
 
 endif

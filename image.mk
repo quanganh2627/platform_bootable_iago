@@ -291,7 +291,12 @@ $(iago_img): \
 
 .PHONY: liveimg
 liveimg: $(iago_img)
-$(call dist-for-goals,liveimg,$(iago_img))
+
+# Build liveimg by default when 'make' is run
+droidcore: $(iago_img)
+
+# Put the live image in out/dist when 'make dist' is run
+$(call dist-for-goals,droidcore,$(iago_img):$(TARGET_PRODUCT)-live-$(FILE_NAME_TAG).img)
 
 # The following rules are for constructing an Iago image which boots in
 # legacy mode. You CANNOT perform EFI installations even if you use an
@@ -339,6 +344,8 @@ $(iago_legacy_image): \
 
 .PHONY: legacyimg
 legacyimg: $(iago_legacy_image)
-$(call dist-for-goals,legacyimg,$(iago_legacy_image))
+
+# Build and place legacy image in out/dist/ when 'make dist' is run.
+$(call dist-for-goals,droidcore,$(iago_legacy_image):$(TARGET_PRODUCT)-legacyimg-$(FILE_NAME_TAG).iso)
 
 endif # TARGET_USE_IAGO
