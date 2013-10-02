@@ -85,14 +85,11 @@ $(iago_provision_ini): \
 	$(hide) mkdir -p $(dir $@)
 	$(hide) cat $^ > $@
 
-iago_efi_bins := \
-	$(GUMMIBOOT_EFI) \
-	$(UEFI_SHIM_EFI) \
-	$(LOCKDOWN_EFI)
-
+iago_efi_bins := $(GUMMIBOOT_EFI) $(UEFI_SHIM_EFI)
 ifneq ($(TARGET_USE_MOKMANAGER),false)
 iago_efi_bins += $(MOKMANAGER_EFI)
 endif
+INSTALLED_RADIOIMAGE_TARGET += $(iago_efi_bins)
 
 # These all need to go in the target-files-package, as those are used to construct
 # provisioning images.
@@ -112,7 +109,7 @@ $(iago_radio_zip): \
 	$(hide) $(ACP) $^ $(iago_provision)
 	$(hide) zip -j $@ $(iago_provision)/*
 
-INSTALLED_RADIOIMAGE_TARGET += $(iago_radio_zip) $(iago_efi_bins)
+INSTALLED_RADIOIMAGE_TARGET += $(iago_radio_zip)
 
 $(iago_images_sfs): \
 		$(IAGO_IMAGES_DEPS) \
@@ -269,6 +266,7 @@ $(iago_fs_img): \
 	$(hide) mkdir -p $(iago_efi_dir)
 	$(hide) mkdir -p $(iago_efi_loader)/entries
 	$(hide) $(ACP) $(UEFI_SHIM_EFI) $(iago_efi_dir)/$(efi_default_name)
+	$(hide) $(ACP) $(LOCKDOWN_EFI) $(iago_efi_dir)
 	$(hide) $(ACP) $(iago_efi_bins) $(iago_efi_dir)
 	$(hide) $(ACP) $(LOCAL_PATH)/loader/loader.conf $(iago_efi_loader)/loader.conf
 	$(hide) $(ACP) -f $(iago_loader_configs) $(iago_efi_loader)/entries/
