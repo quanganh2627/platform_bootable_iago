@@ -230,7 +230,7 @@ iago_loader_configs := \
 	$(iago_base)/0live.conf \
         $(iago_base)/1install.conf \
 	$(iago_base)/2interactive.conf \
-	$(iago_base)/3secureboot.conf
+	$(if $(LOCKDOWN_EFI),$(iago_base)/3secureboot.conf)
 
 ifneq ($(TARGET_USE_MOKMANAGER),false)
 iago_loader_configs += $(iago_base)/4mokmanager.conf
@@ -266,7 +266,7 @@ $(iago_fs_img): \
 	$(hide) mkdir -p $(iago_efi_dir)
 	$(hide) mkdir -p $(iago_efi_loader)/entries
 	$(hide) $(ACP) $(UEFI_SHIM_EFI) $(iago_efi_dir)/$(efi_default_name)
-	$(hide) $(ACP) $(LOCKDOWN_EFI) $(iago_efi_dir)
+	$(hide) $(if $(LOCKDOWN_EFI),$(ACP) $(LOCKDOWN_EFI) $(iago_efi_dir))
 	$(hide) $(ACP) $(iago_efi_bins) $(iago_efi_dir)
 	$(hide) $(ACP) $(LOCAL_PATH)/loader/loader.conf $(iago_efi_loader)/loader.conf
 	$(hide) $(ACP) -f $(iago_loader_configs) $(iago_efi_loader)/entries/
