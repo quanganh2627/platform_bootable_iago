@@ -52,6 +52,7 @@ import zipfile
 
 outdir = os.environ["ANDROID_PRODUCT_OUT"]
 hostdir = os.environ["ANDROID_HOST_OUT"]
+mkbootimg_args = None
 
 sys.path.append(os.path.join("build/tools/releasetools"))
 
@@ -80,9 +81,8 @@ androidfile provision.img
 """
 
 def main(argv):
-    mkbootimg_args = None
-
     def option_handler(o, a):
+        global mkbootimg_args
         if o in ("-o", "--ota_args"):
             OPTIONS.ota_args = a
         elif o in ("-O", "--ota_update"):
