@@ -129,22 +129,26 @@ ifeq ($(TARGET_USERIMAGES_SPARSE_EXT_DISABLED),false)
 endif
 	$(call create-sfs,$(iago_images_root),$@)
 
+# Special tools that we need that aren't staged in /system
+iago_sbin_files := \
+	$(iago_base)/iagod \
+	$(iago_base)/ntfsresize \
+	$(iago_base)/efibootmgr
+
 $(iago_live_ramdisk): \
 		$(LOCAL_PATH)/image.mk \
 		$(LOCAL_PATH)/init.iago.rc \
 		$(INSTALLED_RAMDISK_TARGET) \
 		$(MKBOOTFS) \
 		$(iago_base)/preinit \
-		$(iago_base)/iagod \
-		$(iago_base)/efibootmgr \
+		$(iago_sbin_files) \
 		$(iago_ini) \
 		| $(MINIGZIP) $(ACP) \
 
 	$(hide) rm -rf $(iago_live_ramdisk_root)
 	$(hide) mkdir -p $(iago_live_ramdisk_root)
 	$(hide) $(ACP) -rf $(TARGET_ROOT_OUT)/* $(iago_live_ramdisk_root)
-	$(hide) $(ACP) -f $(iago_base)/efibootmgr $(iago_live_ramdisk_root)/sbin
-	$(hide) $(ACP) -f $(iago_base)/iagod $(iago_live_ramdisk_root)/sbin
+	$(hide) $(ACP) -f $(iago_sbin_files) $(iago_live_ramdisk_root)/sbin
 	$(hide) $(ACP) -f $(iago_ini) $(iago_live_ramdisk_root)
 	$(hide) mv $(iago_live_ramdisk_root)/init $(iago_live_ramdisk_root)/init2
 	$(hide) $(ACP) -p $(iago_base)/preinit $(iago_live_ramdisk_root)/init
@@ -163,8 +167,7 @@ $(iago_nogui_ramdisk): \
 		$(INSTALLED_RAMDISK_TARGET) \
 		$(MKBOOTFS) \
 		$(iago_base)/preinit \
-		$(iago_base)/iagod \
-		$(iago_base)/efibootmgr \
+		$(iago_sbin_files) \
 		$(iago_ini) \
 		$(iago_default_ini) \
 		| $(MINIGZIP) $(ACP) \
@@ -172,8 +175,7 @@ $(iago_nogui_ramdisk): \
 	$(hide) rm -rf $(iago_nogui_ramdisk_root)
 	$(hide) mkdir -p $(iago_nogui_ramdisk_root)
 	$(hide) $(ACP) -rf $(TARGET_ROOT_OUT)/* $(iago_nogui_ramdisk_root)
-	$(hide) $(ACP) -f $(iago_base)/efibootmgr $(iago_nogui_ramdisk_root)/sbin
-	$(hide) $(ACP) -f $(iago_base)/iagod $(iago_nogui_ramdisk_root)/sbin
+	$(hide) $(ACP) -f $(iago_sbin_files) $(iago_nogui_ramdisk_root)/sbin
 	$(hide) $(ACP) -f $(iago_ini) $(iago_default_ini) $(iago_nogui_ramdisk_root)
 	$(hide) mv $(iago_nogui_ramdisk_root)/init $(iago_nogui_ramdisk_root)/init2
 	$(hide) $(ACP) -p $(iago_base)/preinit $(iago_nogui_ramdisk_root)/init
