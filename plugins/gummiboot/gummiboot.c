@@ -127,6 +127,7 @@ static void gummiboot_execute(void)
 {
 	char *device;
 	char *bootimages;
+	char *fallback_efi;
 	int fd, ret;
 
 	if (strcmp(hashmapGetPrintf(ictx.opts, "none", BASE_BOOTLOADER),
@@ -146,7 +147,12 @@ static void gummiboot_execute(void)
 #ifdef USE_MOKMANAGER
 	copy_file(IMAGES_PATH "/MokManager.efi", BOOTLOADER_PATH "/MokManager.efi");
 #endif
-
+	xmkdir(BOOTLOADER_PATH "/EFI", 0777);
+	xmkdir(BOOTLOADER_PATH "/EFI/Boot", 0777);
+	fallback_efi = xasprintf(BOOTLOADER_PATH "/EFI/Boot/%s",
+			strcmp(KERNEL_ARCH, "x86_64") ? "bootia32.efi" : "bootx64.efi");
+	copy_file(IMAGES_PATH "/shim.efi", fallback_efi);
+	free(fallback_efi);
 	nftw(BOOTLOADER_PATH "/loader", delete_cb, 64, FTW_DEPTH | FTW_PHYS);
 	xmkdir(BOOTLOADER_PATH "/loader", 0777);
 	fd = xopen(BOOTLOADER_PATH "/loader/loader.conf", O_WRONLY | O_CREAT);
