@@ -406,8 +406,8 @@ static bool disk_list_cb(char *disk, int _unused index, void *context)
 	struct listnode *disk_list = context;
 	struct ui_option *opt = xmalloc(sizeof(*opt));
 	opt->option = xstrdup(disk);
-	opt->description = xasprintf("%9s %9lldM '%s'", disk,
-		xatoll(hashmapGetPrintf(ictx.opts, NULL, "disk.%s:size", disk)),
+	opt->description = xasprintf("%9s %9lldMiB '%s'", disk,
+		to_mib_floor(xatoll(hashmapGetPrintf(ictx.opts, NULL, "disk.%s:size", disk))),
 		hashmapGetPrintf(ictx.opts, NULL, "disk.%s:model", disk));
 	list_add_tail(disk_list, &opt->list);
 	return true;
