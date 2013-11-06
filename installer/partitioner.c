@@ -247,16 +247,18 @@ static void partitioner_prepare(void)
 	char media[PROPERTY_VALUE_MAX];
 	regex_t diskreg;
 	bool interactive;
+        int prep_counter = 0;
 
 	property_get("ro.iago.media", media, "");
 	interactive = atoi(hashmapGetPrintf(ictx.opts, "0", BASE_INTERACTIVE));
 
+	if (regcomp(&diskreg, DISK_MATCH_REGEX, REG_EXTENDED | REG_NOSUB))
+		die_errno("regcomp");
+
+tryagain:
 	dir = opendir("/sys/block");
 	if (!dir)
 		die();
-
-	if (regcomp(&diskreg, DISK_MATCH_REGEX, REG_EXTENDED | REG_NOSUB))
-		die_errno("regcomp");
 
 	while (1) {
 		struct dirent *dp = readdir(dir);
@@ -394,9 +396,14 @@ static void partitioner_prepare(void)
 	}
 	closedir(dir);
 
-	if (strlen(disks) == 0)
-		die("No suitable installation media found!");
-
+	if (strlen(disks) == 0) {
+		prep_counter++;
+		if (prep_counter == 6)
+			die("No suitable installation media found!");
+		pr_info("No suitable installation media found, sleeping for a bit and try again...");
+		sleep(5);
+		goto tryagain;
+	}
 	xhashmapPut(ictx.opts, xasprintf(BASE_DISK_LIST), disks);
 }
 
