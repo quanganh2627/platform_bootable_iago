@@ -47,7 +47,7 @@ void __die(const char *fmt, ...)
 	va_end(ap);
 
 	len = strlen(buf);
-	while (buf[--len] == '\n')
+	while ((--len >= 0) &&  buf[len] == '\n')
 		buf[len] = 0;
 
 	printf("FATAL: ASSERTION FAILED %s\n", buf);
