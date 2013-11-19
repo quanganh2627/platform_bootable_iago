@@ -218,8 +218,12 @@ def main(argv):
                     os.path.join(bootdir, "BOOTIA32.EFI"))
 
     for fn in ["gummiboot.efi", "MokManager.efi"]:
-        shutil.copyfile(os.path.join(efidir, fn),
-                    os.path.join(bootdir, fn))
+        p = os.path.join(efidir, fn)
+        if os.path.exists(p):
+            shutil.copyfile(os.path.join(efidir, fn),
+                        os.path.join(bootdir, fn))
+        else:
+            print "Skipping missing EFI binary",fn
 
     # build OTA update
     update_fname = os.path.join(imagesdir, "ota.zip")
