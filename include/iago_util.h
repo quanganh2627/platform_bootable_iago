@@ -113,7 +113,14 @@ uint64_t get_volume_size(const char *device);
 int make_ext4fs_nowipe(const char *filename, int64_t len,
                 char *mountpoint, struct selabel_handle *sehnd);
 
-void ui_printf(const char *fmt, ...) __attribute__((format(printf,1,2)));
+enum ui_print_mode {
+	UI_PRINT_ERROR,
+	UI_PRINT_INFO,
+	UI_PRINT_DEBUG,
+	UI_PRINT_VERBOSE
+};
+
+void ui_printf(enum ui_print_mode mode, const char *fmt, ...) __attribute__((format(printf,2,3)));
 char *ui_option_get(const char *question, struct listnode *list);
 bool ui_ask(const char *question, bool dfl);
 void option_list_free(struct listnode *list);

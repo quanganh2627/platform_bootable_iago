@@ -11,6 +11,7 @@
 #include <cutils/log.h>
 #include <cutils/hashmap.h>
 #include <cutils/list.h>
+#include <cutils/klog.h>
 
 #ifdef HAVE_SELINUX
 #include <selinux/selinux.h>
@@ -68,15 +69,17 @@ struct ui_option {
 extern struct iago_context ictx;
 
 #define pr_error(x...) do {\
-    ui_printf("ERROR " x); \
-    ALOGE(x); \
+    ui_printf(UI_PRINT_ERROR, x); \
 } while(0)
-#define pr_verbose ALOGV
+#define pr_verbose do {\
+    ui_printf(UI_PRINT_VERBOSE, x); \
+} while(0)
 #define pr_info(x...) do {\
-    ui_printf(x); \
-    ALOGI(x); \
+    ui_printf(UI_PRINT_INFO, x); \
 } while(0)
-#define pr_debug ALOGD
+#define pr_debug(x...) do {\
+    ui_printf(UI_PRINT_DEBUG, x); \
+} while(0)
 #define pr_perror(x) pr_error("%s: %s\n", x, strerror(errno))
 
 void add_iago_plugin(struct iago_plugin *p);

@@ -750,19 +750,44 @@ int64_t read_sysfs_int(const char *fmt, ...)
 	return val;
 }
 
-void ui_printf(const char *fmt, ...)
+void ui_printf(enum ui_print_mode mode, const char *fmt, ...)
 {
 	va_list ap;
 	char buf[8192];
+	size_t len;
 
-	fputs("iago: ", stdout);
 	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
+	/* Leave a little room for carriage return if needed */
+	vsnprintf(buf, sizeof(buf) - 2, fmt, ap);
 	va_end(ap);
 
-	fputs(buf, stdout);
-	if (buf[strlen(buf) - 1] != '\n')
-		fputs("\n", stdout);
+	len = strlen(buf);
+	if (buf[len - 1] != '\n') {
+		buf[len] = '\n';
+		buf[len + 1] = '\0';
+	}
+
+	switch (mode) {
+	case UI_PRINT_ERROR:
+		fputs("iago: ", stderr);
+		fputs(buf, stderr);
+		ALOGE("%s", buf);
+		KLOG_ERROR("iago", "%s", buf);
+		break;
+	case UI_PRINT_INFO:
+		fputs("iago: ", stdout);
+		fputs(buf, stdout);
+		ALOGI("%s", buf);
+		KLOG_INFO("iago", "%s", buf);
+		break;
+	case UI_PRINT_DEBUG:
+		ALOGD("%s", buf);
+		KLOG_DEBUG("iago", "%s", buf);
+		break;
+	case UI_PRINT_VERBOSE:
+		ALOGV("%s", buf);
+		break;
+	}
 }
 
 bool ui_ask(const char *question, bool dfl)
