@@ -34,7 +34,7 @@
 #define INSTALL_MOUNT       "/installmedia"
 #define TMP_NODE            "/dev/__iago_blkdev"
 
-#define dbg(fmt, ...)       KLOG_INFO("iago", "%s(): " fmt, __func__, ##__VA_ARGS__)
+#define dbg(fmt, ...)       KLOG_INFO("preinit", "%s(): " fmt, __func__, ##__VA_ARGS__)
 #define dbg_perror(x)       dbg("%s: %s\n", x, strerror(errno))
 
 int put_string(int fd, const char *fmt, ...)
