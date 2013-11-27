@@ -26,6 +26,7 @@
 
 #include <cutils/properties.h>
 #include <cutils/android_reboot.h>
+#include <microui.h>
 
 #include <iago.h>
 #include <iago_util.h>
@@ -146,11 +147,16 @@ int main(int argc _unused, char **argv _unused)
 			xasprintf("%d", cli_mode || gui_mode));
 
 	if (!gui_mode) {
-		/* Not much we can do if these fail */
-		freopen("/dev/tty0", "a", stdout);
-		freopen("/dev/tty0", "a", stdout);
-		freopen("/dev/tty0", "r", stdin);
+		if (!cli_mode) {
+			mui_init();
+		} else {
+			/* Not much we can do if these fail */
+			freopen("/dev/tty0", "a", stdout);
+			freopen("/dev/tty0", "a", stdout);
+			freopen("/dev/tty0", "r", stdin);
+		}
 	}
+
 	klog_init();
 	klog_set_level(7);
 
@@ -171,6 +177,9 @@ int main(int argc _unused, char **argv _unused)
 	/* Runs at the very end; creates the install partition that contains
 	 * install.prop, fstab, and recovery.fstab */
 	add_iago_plugin(finalizer_init());
+
+	mui_show_indeterminate_progress();
+	mui_set_background(BACKGROUND_ICON_INSTALLING);
 
 	if (property_get("ro.boot.iago.ini", prop, "") > 0) {
 		char *token;

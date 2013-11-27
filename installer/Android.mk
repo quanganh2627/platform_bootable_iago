@@ -29,11 +29,15 @@ LOCAL_STATIC_LIBRARIES := libiniparser \
 			  libext4_utils_static \
 			  libz \
 			  libselinux \
+			  libpixelflinger_static \
+			  libpng \
+			  libmicroui \
 			  $(plugin_lib_names) \
 			  $(TARGET_IAGO_EXTRA_LIBS) \
 
 LOCAL_C_INCLUDES += external/zlib \
 		    external/iniparser/src \
+		    bootable/userfastboot/microui \
 		    system/extras/ext4_utils \
 		    $(LOCAL_PATH)/../include \
 
@@ -73,8 +77,8 @@ inc := $(call intermediates-dir-for,PACKAGING,iago_extensions)/register.inc
 # (and aboot.o recompiled) when the list of extension libs changes.
 
 junk := $(shell mkdir -p $(dir $(inc));\
-	        echo $(TARGET_IAGO_PLUGINS) > $(inc).temp;\
-	        diff -q $(inc).temp $(inc).list 2>/dev/null || cp -f $(inc).temp $(inc).list)
+		echo $(TARGET_IAGO_PLUGINS) > $(inc).temp;\
+		diff -q $(inc).temp $(inc).list 2>/dev/null || cp -f $(inc).temp $(inc).list)
 
 $(inc) : libs := $(plugin_names)
 $(inc) : $(inc).list $(LOCAL_PATH)/Android.mk

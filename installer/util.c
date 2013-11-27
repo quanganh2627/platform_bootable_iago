@@ -31,6 +31,7 @@
 #include <cutils/android_reboot.h>
 #include <cutils/properties.h>
 #include <ext4_utils.h>
+#include <microui.h>
 
 #include <iago.h>
 #include <iago_util.h>
@@ -50,9 +51,9 @@ void __die(const char *fmt, ...)
 	while ((--len >= 0) &&  buf[len] == '\n')
 		buf[len] = 0;
 
-	printf("FATAL: ASSERTION FAILED %s\n", buf);
+	pr_error("FATAL: %s\n", buf);
 	property_set("iago.error", buf);
-	LOG_ALWAYS_FATAL("FATAL: ASSERTION FAILED %s", buf);
+	LOG_ALWAYS_FATAL("iago failed assertion");
 	exit(EXIT_FAILURE); /* shouldn't get here */
 }
 
@@ -769,14 +770,13 @@ void ui_printf(enum ui_print_mode mode, const char *fmt, ...)
 
 	switch (mode) {
 	case UI_PRINT_ERROR:
-		fputs("iago: ", stderr);
-		fputs(buf, stderr);
+		mui_set_background(BACKGROUND_ICON_ERROR);
+		mui_show_text(1);
+		mui_print("ERROR: %s", buf);
 		ALOGE("%s", buf);
-		KLOG_ERROR("iago", "%s", buf);
 		break;
 	case UI_PRINT_INFO:
-		fputs("iago: ", stdout);
-		fputs(buf, stdout);
+		mui_print("%s", buf);
 		ALOGI("%s", buf);
 		KLOG_INFO("iago", "%s", buf);
 		break;
