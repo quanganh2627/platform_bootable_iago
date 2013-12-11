@@ -34,7 +34,7 @@
 #define INSTALL_MOUNT       "/installmedia"
 #define TMP_NODE            "/dev/__iago_blkdev"
 
-#define dbg(fmt, ...)       KLOG_INFO("iago", "%s(): " fmt, __func__, ##__VA_ARGS__)
+#define dbg(fmt, ...)       KLOG_INFO("preinit", "%s(): " fmt, __func__, ##__VA_ARGS__)
 #define dbg_perror(x)       dbg("%s: %s\n", x, strerror(errno))
 
 int put_string(int fd, const char *fmt, ...)
@@ -163,8 +163,8 @@ static enum fs_type detect_fs(const char *path)
 
 int is_install_media(char *name)
 {
-    char pathbuf[PATH_MAX];
-    char devinfo[PATH_MAX];
+    char pathbuf[PATH_MAX] = {0};
+    char devinfo[PATH_MAX] = {0};
     int fd;
     char *minor_s;
     dev_t dev;
@@ -182,11 +182,15 @@ int is_install_media(char *name)
         dbg_perror("open");
         return 0;
     }
-    if (read(fd, devinfo, sizeof(devinfo)) <= 0) {
+    if ((ret = read(fd, devinfo, sizeof(devinfo)-1)) <= 0) {
         dbg_perror("read");
         return 0;
     }
     close(fd);
+
+    devinfo[ret] = '\0';
+    ret = 0;
+
     minor_s = strchr(devinfo, ':');
     if (!minor_s)
         return 0;

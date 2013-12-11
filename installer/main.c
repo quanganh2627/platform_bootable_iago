@@ -21,10 +21,12 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/vt.h>
-#include "linux/tiocl.h"
+#include <linux/tiocl.h>
+#include <linux/kd.h>
 
 #include <cutils/properties.h>
 #include <cutils/android_reboot.h>
+#include <microui.h>
 
 #include <iago.h>
 #include <iago_util.h>
@@ -126,7 +128,6 @@ int main(int argc _unused, char **argv _unused)
 		pr_error("could not redirect kernel messages do /dev/tty2\n");
 	}
 
-	pr_info("iago daemon " IAGO_VERSION " starting\n");
 	umask(066);
 #ifdef HAVE_SELINUX
 	struct selinux_opt seopts[] = {
@@ -145,6 +146,22 @@ int main(int argc _unused, char **argv _unused)
 	xhashmapPut(ictx.opts, xstrdup(BASE_INTERACTIVE),
 			xasprintf("%d", cli_mode || gui_mode));
 
+	if (!gui_mode) {
+		if (!cli_mode) {
+			mui_init();
+		} else {
+			/* Not much we can do if these fail */
+			freopen("/dev/tty0", "a", stdout);
+			freopen("/dev/tty0", "a", stdout);
+			freopen("/dev/tty0", "r", stdin);
+		}
+	}
+
+	klog_init();
+	klog_set_level(7);
+
+	pr_info("iago daemon " IAGO_VERSION " starting\n");
+
 	/* Initializes the GPT partition table */
 	add_iago_plugin(partitioner_init());
 
@@ -160,6 +177,9 @@ int main(int argc _unused, char **argv _unused)
 	/* Runs at the very end; creates the install partition that contains
 	 * install.prop, fstab, and recovery.fstab */
 	add_iago_plugin(finalizer_init());
+
+	mui_show_indeterminate_progress();
+	mui_set_background(BACKGROUND_ICON_INSTALLING);
 
 	if (property_get("ro.boot.iago.ini", prop, "") > 0) {
 		char *token;

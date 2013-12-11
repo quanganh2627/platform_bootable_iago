@@ -38,9 +38,9 @@ struct guid {
 	       getbyte(d2, 3), getbyte(d2, 2), getbyte(d2, 1), getbyte(d2, 0) } } )
 
 #define partition_for_each(gpt, i, e) \
-	for ((i) = 1, (e) = gpt_entry_get((i), (gpt)); \
+	for ((i) = 1, (e) = gpt_entry_offset((i), (gpt)); \
 			i <= (gpt)->header.num_pentries; \
-			e = gpt_entry_get(++(i), (gpt))) if (!(e)->first_lba) continue; else
+			e = gpt_entry_offset(++(i), (gpt))) if (!(e)->first_lba) continue; else
 
 /* When written to disk all fields in GPT and entries must be little-endian.
  * Conversion to and from host ordering done in gpt_read/gpt_write functions,
@@ -166,6 +166,9 @@ int gpt_entry_set_name(struct gpt_entry *e, char *name);
 
 /* Indexes start at 1, to correspond with the disk minor number */
 struct gpt_entry *gpt_entry_get(uint32_t entry_index, struct gpt *gpt);
+
+/* Same as gpt_entry_get, used inside a loop with bounds-checking */
+struct gpt_entry *gpt_entry_offset(uint32_t entry_index, struct gpt *gpt);
 
 /* Returned string must be freed */
 char *gpt_entry_get_name(struct gpt_entry *e);

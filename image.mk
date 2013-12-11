@@ -29,11 +29,11 @@ IAGO_IMAGES_DEPS := \
 	$(INSTALLED_BOOTIMAGE_TARGET) \
 	$(INSTALLED_RECOVERYIMAGE_TARGET) \
 
-ifeq ($(TARGET_USERIMAGES_SPARSE_EXT_DISABLED),false)
+ifneq ($(TARGET_USERIMAGES_SPARSE_EXT_DISABLED),true)
 # need to convert sparse images back to normal ext4
 iago_sparse_images_deps += \
 	$(INSTALLED_SYSTEMIMAGE) \
-        $(INSTALLED_USERDATAIMAGE_TARGET) \
+	$(INSTALLED_USERDATAIMAGE_TARGET) \
 
 IAGO_IMAGES_DEPS_HOST += \
 	$(HOST_OUT_EXECUTABLES)/simg2img \
@@ -41,7 +41,7 @@ IAGO_IMAGES_DEPS_HOST += \
 else
 IAGO_IMAGES_DEPS += \
 	$(INSTALLED_SYSTEMIMAGE) \
-        $(INSTALLED_USERDATAIMAGE_TARGET) \
+	$(INSTALLED_USERDATAIMAGE_TARGET) \
 
 endif
 
@@ -91,6 +91,9 @@ iago_efi_bins += $(MOKMANAGER_EFI)
 endif
 INSTALLED_RADIOIMAGE_TARGET += $(iago_efi_bins)
 
+microui_resources_common := $(LOCAL_PATH)/res
+microui_resources_deps := $(shell find $(microui_resources_common) -type f)
+
 # These all need to go in the target-files-package, as those are used to construct
 # provisioning images.
 iago_radio_zip := $(iago_base)/iago_provision_files.zip
@@ -101,6 +104,7 @@ $(iago_radio_zip): \
 		$(iago_base)/preinit \
 		$(iago_base)/iagod \
 		$(iago_base)/efibootmgr \
+		$(microui_resources_deps) \
 		bootable/iago/init.provision.rc \
 		bootable/iago/live_img_layout.conf \
 		| $(ACP)
@@ -170,6 +174,7 @@ $(iago_nogui_ramdisk): \
 		$(iago_sbin_files) \
 		$(iago_ini) \
 		$(iago_default_ini) \
+		$(microui_resources_deps) \
 		| $(MINIGZIP) $(ACP) \
 
 	$(hide) rm -rf $(iago_nogui_ramdisk_root)
@@ -184,6 +189,7 @@ $(iago_nogui_ramdisk): \
 	$(hide) mkdir -p $(iago_nogui_ramdisk_root)/mnt
 	$(hide) $(ACP) $(LOCAL_PATH)/init.nogui.rc $(iago_nogui_ramdisk_root)/init.rc
 	$(hide) $(ACP) $(LOCAL_PATH)/init.iago.rc $(iago_nogui_ramdisk_root)
+	$(hide) $(ACP) -rf $(microui_resources_common) $(iago_nogui_ramdisk_root)
 	$(hide) $(MKBOOTFS) $(iago_nogui_ramdisk_root) | $(MINIGZIP) > $@
 
 $(iago_live_bootimage): \
@@ -230,7 +236,7 @@ endif
 
 iago_loader_configs := \
 	$(iago_base)/0live.conf \
-        $(iago_base)/1install.conf \
+	$(iago_base)/1install.conf \
 	$(iago_base)/2interactive.conf \
 	$(if $(LOCKDOWN_EFI),$(iago_base)/3secureboot.conf)
 

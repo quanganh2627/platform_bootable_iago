@@ -49,6 +49,7 @@ import subprocess
 import tempfile
 import shutil
 import zipfile
+import glob
 
 outdir = os.environ["ANDROID_PRODUCT_OUT"]
 hostdir = os.environ["ANDROID_HOST_OUT"]
@@ -152,6 +153,16 @@ def main(argv):
     shutil.copyfile(os.path.join(prov_root, "init.provision.rc"),
                     os.path.join(ramdisk_root, "init.rc"))
 
+    # Copy images
+    try:
+        os.makedirs(os.path.join(ramdisk_root, "res/images/"));
+    except OSError, e:
+        # Don't care if already exists
+        if e.errno != 17:
+            raise
+    for f in glob.glob(os.path.join(prov_root, "*.png")):
+	shutil.copy(f, os.path.join(ramdisk_root, "res/images/"))
+
     # Copy other files unique to provisioning ramdisk out of RADIO/
     for fn in ["iago.ini", "iago-default.ini", "iago-provision.ini"]:
         shutil.copyfile(os.path.join(prov_root, fn),
@@ -218,8 +229,12 @@ def main(argv):
                     os.path.join(bootdir, "BOOTIA32.EFI"))
 
     for fn in ["gummiboot.efi", "MokManager.efi"]:
-        shutil.copyfile(os.path.join(efidir, fn),
-                    os.path.join(bootdir, fn))
+        p = os.path.join(efidir, fn)
+        if os.path.exists(p):
+            shutil.copyfile(os.path.join(efidir, fn),
+                        os.path.join(bootdir, fn))
+        else:
+            print "Skipping missing EFI binary",fn
 
     # build OTA update
     update_fname = os.path.join(imagesdir, "ota.zip")

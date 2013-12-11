@@ -31,6 +31,7 @@
 #include <cutils/android_reboot.h>
 #include <cutils/properties.h>
 #include <ext4_utils.h>
+#include <microui.h>
 
 #include <iago.h>
 #include <iago_util.h>
@@ -47,12 +48,12 @@ void __die(const char *fmt, ...)
 	va_end(ap);
 
 	len = strlen(buf);
-	while (buf[--len] == '\n')
+	while ((--len >= 0) &&  buf[len] == '\n')
 		buf[len] = 0;
 
-	printf("FATAL: ASSERTION FAILED %s\n", buf);
+	pr_error("FATAL: %s\n", buf);
 	property_set("iago.error", buf);
-	LOG_ALWAYS_FATAL("FATAL: ASSERTION FAILED %s", buf);
+	LOG_ALWAYS_FATAL("iago failed assertion");
 	exit(EXIT_FAILURE); /* shouldn't get here */
 }
 
@@ -750,19 +751,43 @@ int64_t read_sysfs_int(const char *fmt, ...)
 	return val;
 }
 
-void ui_printf(const char *fmt, ...)
+void ui_printf(enum ui_print_mode mode, const char *fmt, ...)
 {
 	va_list ap;
 	char buf[8192];
+	size_t len;
 
-	fputs("iago: ", stdout);
 	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
+	/* Leave a little room for carriage return if needed */
+	vsnprintf(buf, sizeof(buf) - 2, fmt, ap);
 	va_end(ap);
 
-	fputs(buf, stdout);
-	if (buf[strlen(buf) - 1] != '\n')
-		fputs("\n", stdout);
+	len = strlen(buf);
+	if (buf[len - 1] != '\n') {
+		buf[len] = '\n';
+		buf[len + 1] = '\0';
+	}
+
+	switch (mode) {
+	case UI_PRINT_ERROR:
+		mui_set_background(BACKGROUND_ICON_ERROR);
+		mui_show_text(1);
+		mui_print("ERROR: %s", buf);
+		ALOGE("%s", buf);
+		break;
+	case UI_PRINT_INFO:
+		mui_print("%s", buf);
+		ALOGI("%s", buf);
+		KLOG_INFO("iago", "%s", buf);
+		break;
+	case UI_PRINT_DEBUG:
+		ALOGD("%s", buf);
+		KLOG_DEBUG("iago", "%s", buf);
+		break;
+	case UI_PRINT_VERBOSE:
+		ALOGV("%s", buf);
+		break;
+	}
 }
 
 bool ui_ask(const char *question, bool dfl)

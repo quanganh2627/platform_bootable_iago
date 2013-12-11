@@ -112,6 +112,8 @@ static uint64_t check_for_android(struct gpt *gpt)
 	size = 0;
 	partition_for_each(gpt, i, e) {
 		char *name = gpt_entry_get_name(e);
+		if (!name)
+			die("Malloc fails for gpt_entry_get_name");
 		bool c = false;
 		if (strncmp(name, NAME_MAGIC, 8))
 			c = true;
@@ -143,7 +145,7 @@ static int64_t get_ntfs_min_size(int index, struct gpt *gpt)
 	struct gpt_entry *e;
 	char *device;
 	int ret;
-	char buf[4096];
+	char buf[4096] = {0};
 	char *pos, *pos2;
 	size_t sz;
 
@@ -175,7 +177,8 @@ static int64_t get_ntfs_min_size(int index, struct gpt *gpt)
 		die("ntfsresize returned '%s'", buf);
 	pos += strlen(needle);
 	pos2 = strstr(pos, " ");
-	*pos2 = '\0';
+	if (pos2)
+		*pos2 = '\0';
 
 	return xatoll(pos);
 }
@@ -191,6 +194,8 @@ static void resize_ntfs_partition(int index, struct gpt *gpt, uint64_t new_size)
 
 	/* Assumes all checks in get_ntfs_min_size_mb have been done */
 	e = gpt_entry_get(index, gpt);
+	if (!e)
+		die("invalid index %d", index);
 
 	/* Resize the NTFS filesystem */
 	device = gpt_get_device_node(index, gpt);
@@ -267,7 +272,7 @@ tryagain:
 		uint64_t free_start_lba, free_end_lba;
 		struct gpt *gpt;
 		char *device;
-		int ptn_index;
+		int  ptn_index;
 		char *diskname_node;
 		struct stat sb;
 
@@ -316,12 +321,14 @@ tryagain:
 		}
 
 		ptn_index = check_for_ptn(gpt, get_guid_type(PART_MS_RESERVED));
-		if (ptn_index > 0) {
+
+		if ((ptn_index > 0) && (uint32_t)ptn_index <= (gpt)->header.num_pentries) {
 			/* User data NTFS partition always right after
 			 * the ms reserved partition */
 			uint64_t ret, size;
 			int ms_data_idx = ptn_index + 1;
-			size = gpt_entry_get_size(gpt, gpt_entry_get(ms_data_idx, gpt));
+
+			size = gpt_entry_get_size(gpt, gpt_entry_offset(ms_data_idx, gpt));
 			pr_info("Disk %s has an existing Windows installation",
 					dp->d_name);
 			pr_debug("%s: Found Windows data at partition index %d of size %llu MiB\n",
@@ -357,7 +364,7 @@ tryagain:
 			pr_debug("%s: No Windows installation found\n", dp->d_name);
 
 		ptn_index = check_for_ptn(gpt, get_guid_type(PART_ESP));
-		if (ptn_index > 0) {
+		if (ptn_index > 0 && (uint32_t)ptn_index <= (gpt)->header.num_pentries) {
 			/* We found an EFI system partition and may
 			 * re-use it */
 			pr_debug("%s: Found ESP at partition index %d\n",
@@ -368,7 +375,7 @@ tryagain:
 			xhashmapPut(ictx.opts,
 				xasprintf("disk.%s:esp_size", dp->d_name),
 				xasprintf("%llu", mib_align(gpt_entry_get_size(
-							gpt, gpt_entry_get(ptn_index, gpt)))));
+							gpt, gpt_entry_offset(ptn_index, gpt)))));
 		} else
 			pr_debug("%s: no EFI System Partition found\n",
 					dp->d_name);

@@ -267,26 +267,27 @@ char *gpt_guid_to_string(struct guid *g)
 	return ret;
 }
 
+/* re-factor gpt_entry_get, use when bounds-checking provided */
+struct gpt_entry *gpt_entry_offset(uint32_t entry_index, struct gpt *gpt)
+{
+	return ((struct gpt_entry *)(gpt->entries + (gpt->header.pentry_size *
+				--entry_index)));
+}
 
 struct gpt_entry *gpt_entry_get(uint32_t entry_index, struct gpt *gpt)
 {
-	struct gpt_entry *e;
 	if (!entry_index || entry_index > gpt->header.num_pentries)
 		return NULL;
 
-	e = (struct gpt_entry *)(gpt->entries + (gpt->header.pentry_size *
-				--entry_index));
-
-	return e;
+	return (gpt_entry_offset(entry_index, gpt));
 }
-
 
 uint32_t gpt_next_index(struct gpt *gpt)
 {
 	uint32_t i;
 
 	for (i = 1; i <= gpt->header.num_pentries; i++) {
-		struct gpt_entry *e = gpt_entry_get(i, gpt);
+		struct gpt_entry *e = gpt_entry_offset(i, gpt);
 		if (!e->first_lba)
 			return i;
 	}
