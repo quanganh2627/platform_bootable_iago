@@ -29,7 +29,7 @@ IAGO_IMAGES_DEPS := \
 	$(INSTALLED_BOOTIMAGE_TARGET) \
 	$(INSTALLED_RECOVERYIMAGE_TARGET) \
 
-ifeq ($(TARGET_USERIMAGES_SPARSE_EXT_DISABLED),false)
+ifneq ($(TARGET_USERIMAGES_SPARSE_EXT_DISABLED),true)
 # need to convert sparse images back to normal ext4
 iago_sparse_images_deps += \
 	$(INSTALLED_SYSTEMIMAGE) \
