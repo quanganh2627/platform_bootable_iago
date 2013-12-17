@@ -34,6 +34,8 @@ LOCAL_STATIC_LIBRARIES := libiniparser \
 			  libmicroui \
 			  $(plugin_lib_names) \
 			  $(TARGET_IAGO_EXTRA_LIBS) \
+			  libstdc++ \
+			  libenc
 
 LOCAL_C_INCLUDES += external/zlib \
 		    external/iniparser/src \
