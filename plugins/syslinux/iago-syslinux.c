@@ -67,7 +67,7 @@ void syslinux_cli(void)
 
 static bool bootimage_cb(char *entry, int index _unused, void *context)
 {
-	int fd = (int)context;
+	int fd = *((int *)context);
 	char *disk, *description, *prefix, *bus;
 
 	prefix = xasprintf("partition.%s", entry);
@@ -134,7 +134,7 @@ void syslinux_execute(void)
 	fd = xopen(SYSLINUX_CFG_FN, O_WRONLY | O_APPEND);
 	put_string(fd, "menu androidcommand %s\n",
 		hashmapGetPrintf(ictx.opts, NULL, "partition.misc:index"));
-	string_list_iterate(bootimages, bootimage_cb, (void*)fd);
+	string_list_iterate(bootimages, bootimage_cb, &fd);
 
 	xclose(fd);
 	umount(BOOTLOADER_PATH);

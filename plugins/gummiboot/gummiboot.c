@@ -163,7 +163,7 @@ static void gummiboot_execute(void)
 
 	xmkdir(BOOTLOADER_PATH "/loader/entries", 0777);
 	pr_info("Constructing loader entries");
-	string_list_iterate(bootimages, bootimage_cb, (void*)fd);
+	string_list_iterate(bootimages, bootimage_cb, NULL);
 
 	device = xasprintf("/dev/block/%s", hashmapGetPrintf(ictx.opts, NULL, BASE_INSTALL_DISK));
 	clean_pstore();

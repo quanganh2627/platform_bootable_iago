@@ -34,7 +34,7 @@ static void finalizer_cli(void)
 
 static bool write_props_cb(void *k, void *v, void *context)
 {
-	int propsfd = (int)context;
+	int propsfd = *((int *)context);
 	char *key = k;
 	char *value = v;
 
@@ -48,7 +48,7 @@ static void write_install_props(void)
 	int propsfd;
 
 	propsfd = xopen("/mnt/" PROP_PATH_FACTORY, O_WRONLY | O_CREAT);
-	hashmapForEach(ictx.iprops, write_props_cb, (void *)propsfd);
+	hashmapForEach(ictx.iprops, write_props_cb, &propsfd);
 	xclose(propsfd);
 }
 
