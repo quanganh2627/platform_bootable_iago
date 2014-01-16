@@ -27,11 +27,14 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <regex.h>
+#include <libgen.h>
 
+#include <ext2fs/ext2_fs.h>
 #include <cutils/klog.h>
 
 #define DISK_MATCH_REGEX    "^[.]+|(ram|loop)[0-9]+|mmcblk[0-9]+(rpmb|boot[0-9]+)$"
-#define INSTALL_MOUNT       "/installmedia"
+#define INSTALL_MOUNT       "/installmnt"
+#define INSTALL_MEDIA       "/installmedia"
 #define TMP_NODE            "/dev/__iago_blkdev"
 
 #define dbg(fmt, ...)       KLOG_INFO("preinit", "%s(): " fmt, __func__, ##__VA_ARGS__)
@@ -84,14 +87,6 @@ int seek_and_read(int fd, off_t offset, void *buf, size_t count)
 }
 
 
-enum fs_type {
-    FS_VFAT,
-    FS_ISO9660,
-    FS_UNKNOWN,
-    FS_ERROR
-};
-
-
 static int is_vfat(int fd)
 {
     unsigned char buf[2];
@@ -137,23 +132,47 @@ static int is_iso9660(int fd)
 }
 
 
-static enum fs_type detect_fs(const char *path)
+static const char *is_extN(int fd)
+{
+    struct ext2_super_block sb;
+
+    if (seek_and_read(fd, 1024, &sb, sizeof(sb)))
+        return 0;
+
+    if (sb.s_magic != EXT2_SUPER_MAGIC)
+        return 0;
+
+    /* no journal? */
+    if (!(sb.s_feature_compat & EXT3_FEATURE_COMPAT_HAS_JOURNAL))
+        return "ext2";
+
+    /* small INCOMPAT? */
+    if (sb.s_feature_incompat < EXT3_FEATURE_INCOMPAT_EXTENTS &&
+            /* and small RO_COMPAT? */
+            sb.s_feature_ro_compat < EXT4_FEATURE_RO_COMPAT_HUGE_FILE)
+        return "ext3";
+
+    return "ext4";
+}
+
+
+static const char *detect_fs(const char *path)
 {
     int fd;
-    int ret;
+    const char *ret;
 
     fd = open(path, O_RDONLY);
     if (fd < 0) {
         dbg_perror("open");
-        return FS_ERROR;
+        return 0;
     }
 
     if (is_vfat(fd))
-        ret = FS_VFAT;
+        ret = "vfat";
     else if (is_iso9660(fd))
-        ret = FS_ISO9660;
+        ret = "iso9660";
     else
-        ret = FS_UNKNOWN;
+        ret = is_extN(fd);
 
     close(fd);
 
@@ -170,7 +189,7 @@ int is_install_media(char *name)
     dev_t dev;
     int ret = 0;
     struct stat statbuf;
-    enum fs_type fst;
+    const char *fst, *src;
 
     dbg("------> examining %s\n", name);
 
@@ -206,25 +225,38 @@ int is_install_media(char *name)
 
     fst = detect_fs(TMP_NODE);
 
-    if (fst != FS_VFAT && fst != FS_ISO9660) {
+    if (!fst) {
         dbg("Not the right fs type\n");
         goto out_unlink;
     }
 
-    dbg("Mounting device %d:%d\n", major(dev), minor(dev));
-    /* Try to mount an iso9660 fs */
-    if (mount(TMP_NODE, INSTALL_MOUNT, (fst == FS_VFAT) ? "vfat" : "iso9660",
-                    MS_RDONLY, "")) {
+    strcpy(pathbuf, INSTALL_MOUNT);
+    if (!(src = getenv("SRC")) && (src = getenv("BOOT_IMAGE"))) {
+        strcpy(devinfo, src);
+        src = dirname(devinfo);
+    }
+    strcat(pathbuf, src);
+
+    dbg("Mounting device %d:%d type=%s\n", major(dev), minor(dev), fst);
+    /* Try to mount the fs */
+    if (mount(TMP_NODE, INSTALL_MOUNT, fst, MS_RDONLY, "")) {
         dbg_perror("mount");
         goto out_unlink;
     }
 
+    if (mount(pathbuf, INSTALL_MEDIA, "", MS_BIND, NULL)) {
+        dbg_perror("mount_bind");
+        umount(INSTALL_MOUNT);
+        goto out_unlink;
+    }
+
     /* It mounted - check for cookie */
-    if (stat(INSTALL_MOUNT "/iago-cookie", &statbuf)) {
+    if (stat(INSTALL_MEDIA "/iago-cookie", &statbuf)) {
         dbg_perror("stat iago cookie");
+        umount(INSTALL_MEDIA);
         umount(INSTALL_MOUNT);
     } else {
-        dbg("'%s' is Iago media\n", pathbuf);
+        dbg("'%s %s' is Iago media\n", name, pathbuf);
         ret = 1;
     }
 
@@ -264,7 +296,7 @@ int mount_device(void)
         if (!regexec(&diskreg, name, 0, NULL, 0))
             continue;
 
-        snprintf(path, sizeof(path), "/sys/block/%s/", name);
+        snprintf(path, sizeof(path), "/sys/block/%s", name);
         if (is_install_media(path))
             goto success;
 
@@ -280,7 +312,7 @@ int mount_device(void)
                 continue;
             if (strncmp(dp2->d_name, name, strlen(name)))
                 continue;
-            snprintf(path, sizeof(path), "/sys/block/%s/%s/",
+            snprintf(path, sizeof(path), "/sys/block/%s/%s",
                     name, dp2->d_name);
             if (is_install_media(path))
                 goto success;

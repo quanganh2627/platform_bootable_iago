@@ -9,6 +9,6 @@ LOCAL_FORCE_STATIC_EXECUTABLE := true
 LOCAL_STATIC_LIBRARIES := libcutils libc
 LOCAL_MODULE_PATH := $(PRODUCT_OUT)/iago
 LOCAL_UNSTRIPPED_PATH := $(PRODUCT_OUT)/iago/debug
-LOCAL_C_INCLUDES := bootable/iago/include/
+LOCAL_C_INCLUDES := bootable/iago/include external/e2fsprogs/lib
 
 include $(BUILD_EXECUTABLE)

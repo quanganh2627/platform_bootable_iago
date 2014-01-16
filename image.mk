@@ -156,6 +156,7 @@ $(iago_live_ramdisk): \
 	$(hide) $(ACP) -f $(iago_ini) $(iago_live_ramdisk_root)
 	$(hide) mv $(iago_live_ramdisk_root)/init $(iago_live_ramdisk_root)/init2
 	$(hide) $(ACP) -p $(iago_base)/preinit $(iago_live_ramdisk_root)/init
+	$(hide) mkdir -p $(iago_live_ramdisk_root)/installmnt
 	$(hide) mkdir -p $(iago_live_ramdisk_root)/installmedia
 	$(hide) mkdir -p $(iago_live_ramdisk_root)/tmp
 	$(hide) mkdir -p $(iago_live_ramdisk_root)/mnt
@@ -184,6 +185,7 @@ $(iago_nogui_ramdisk): \
 	$(hide) $(ACP) -f $(iago_ini) $(iago_default_ini) $(iago_nogui_ramdisk_root)
 	$(hide) mv $(iago_nogui_ramdisk_root)/init $(iago_nogui_ramdisk_root)/init2
 	$(hide) $(ACP) -p $(iago_base)/preinit $(iago_nogui_ramdisk_root)/init
+	$(hide) mkdir -p $(iago_nogui_ramdisk_root)/installmnt
 	$(hide) mkdir -p $(iago_nogui_ramdisk_root)/installmedia
 	$(hide) mkdir -p $(iago_nogui_ramdisk_root)/tmp
 	$(hide) mkdir -p $(iago_nogui_ramdisk_root)/mnt
