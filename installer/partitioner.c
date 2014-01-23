@@ -639,9 +639,11 @@ static enum part_type string_to_type(char *type)
 		return PART_ANDROID_METADATA;
 	else if (!strcmp(type, "ext4"))
 		return PART_LINUX;
-	else if (!strcmp(type, "vfat")) {
+	else if (!strcmp(type, "vfat"))
 		return PART_MS_DATA;
-	} else
+	else if (!strcmp(type, "swap"))
+		return PART_LINUX_SWAP;
+	else
 		die("Unknown partition type %s", type);
 }
 
