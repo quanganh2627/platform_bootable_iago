@@ -62,6 +62,9 @@ static const struct guid ms_data_ptn = GPT_GUID(0xEBD0A0A2, 0xB9E5, 0x4433,
 static const struct guid linux_ptn = GPT_GUID(0x0FC63DAF, 0x8483, 0x4772,
 		0x8E79, 0x3D69D8477DE4ULL);
 
+static const struct guid linux_swap = GPT_GUID(0x0657FD6D, 0xA4AB, 0x43C4,
+		0x84E5, 0x0933C84B4F4FULL);
+
 /* These aren't defined anywhere so I generated them */
 static const struct guid android_boot = GPT_GUID(0x49a4d17f, 0x93a3, 0x45c1,
 		0xa0de, 0xf50b2ebe2599ULL);
@@ -106,6 +109,8 @@ const struct guid *get_guid_type(enum part_type t)
 	switch (t) {
 	case PART_LINUX:
 		return &linux_ptn;
+	case PART_LINUX_SWAP:
+		return &linux_swap;
 	case PART_MS_DATA:
 		return &ms_data_ptn;
 	case PART_ESP:

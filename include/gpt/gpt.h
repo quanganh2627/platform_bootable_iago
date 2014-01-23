@@ -144,7 +144,8 @@ enum part_type {
 	PART_ANDROID_METADATA,
 	PART_MS_DATA,
 	PART_MS_RESERVED,
-	PART_ESP
+	PART_ESP,
+	PART_LINUX_SWAP
 };
 
 /* Fetch a struct guid associated with a particular type. Do not
