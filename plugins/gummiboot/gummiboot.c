@@ -128,6 +128,7 @@ static void gummiboot_execute(void)
 	char *device;
 	char *bootimages;
 	char *fallback_efi;
+        char *swap;
 	int fd, ret;
 
 	if (strcmp(hashmapGetPrintf(ictx.opts, "none", BASE_BOOTLOADER),
@@ -159,6 +160,9 @@ static void gummiboot_execute(void)
 	put_string(fd, "timeout %s\n", hashmapGetPrintf(ictx.opts, TIMEOUT_DFL, GUMMIBOOT_TIMEOUT));
 	put_string(fd, "default boot\n");
 	put_string(fd, "android-bcb %s\n", hashmapGetPrintf(ictx.opts, NULL, "partition.misc:guid"));
+	swap = hashmapGetPrintf(ictx.opts, NULL, "partition.swap:guid");
+	if (swap)
+		put_string(fd, "android-swap %s\n", swap);
 	xclose(fd);
 
 	xmkdir(BOOTLOADER_PATH "/loader/entries", 0777);
