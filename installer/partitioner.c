@@ -406,8 +406,8 @@ tryagain:
 	if (strlen(disks) == 0) {
 		prep_counter++;
 		if (prep_counter == 6)
-			die("No suitable installation media found!");
-		pr_info("No suitable installation media found, sleeping for a bit and try again...");
+			die("No suitable device to install Android on found!");
+		pr_info("No suitable device to install Android on found, sleeping for a bit and try again...");
 		sleep(5);
 		goto tryagain;
 	}
