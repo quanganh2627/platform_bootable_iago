@@ -20,7 +20,7 @@
 
 #include <iago.h>
 
-#define IAGO_VERSION	"02.03"
+#define IAGO_VERSION	"02.04"
 
 struct iago_plugin *partitioner_init(void);
 struct iago_plugin *imagewriter_init(void);
