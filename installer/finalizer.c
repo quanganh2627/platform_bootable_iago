@@ -64,10 +64,10 @@ static void finalizer_execute(void)
 	mount_partition_device(device, type, "/mnt/factory");
 	write_install_props();
 	umount("/mnt/factory");
-	bus = hashmapGetPrintf(ictx.opts, NULL, DISK_BUS_NAME);
+	bus = hashmapGetPrintf(ictx.opts, "", DISK_BUS_NAME);
 
 	/* Just for info */
-	if (bus)
+	if (strlen(bus) > 0)
 		pr_info("androidboot.disk=%s", bus);
 }
 

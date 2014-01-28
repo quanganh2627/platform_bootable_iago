@@ -85,8 +85,8 @@ static bool bootimage_cb(char *entry, int index _unused, void *context _unused)
 	put_string(fd, "title %s\n", description);
 	guid = hashmapGetPrintf(ictx.opts, NULL, "%s:guid", prefix);
 	put_string(fd, "android %s\n", guid);
-	bus = hashmapGetPrintf(ictx.opts, NULL, DISK_BUS_NAME);
-	if (bus)
+	bus = hashmapGetPrintf(ictx.opts, "", DISK_BUS_NAME);
+	if (strlen(bus) > 0)
 		put_string(fd, "android-bus %s\n", bus);
 	xclose(fd);
 	free(prefix);
@@ -160,8 +160,8 @@ static void gummiboot_execute(void)
 	put_string(fd, "timeout %s\n", hashmapGetPrintf(ictx.opts, TIMEOUT_DFL, GUMMIBOOT_TIMEOUT));
 	put_string(fd, "default boot\n");
 	put_string(fd, "android-bcb %s\n", hashmapGetPrintf(ictx.opts, NULL, "partition.misc:guid"));
-	swap = hashmapGetPrintf(ictx.opts, NULL, "partition.swap:guid");
-	if (swap)
+	swap = hashmapGetPrintf(ictx.opts, "", "partition.swap:guid");
+	if (strlen(swap) > 0)
 		put_string(fd, "android-swap %s\n", swap);
 	xclose(fd);
 

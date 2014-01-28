@@ -80,8 +80,8 @@ static bool bootimage_cb(char *entry, int index _unused, void *context)
 	disk = hashmapGetPrintf(ictx.opts, NULL,
 			"%s:index", prefix);
 	put_string(fd, "    append current %s", disk);
-	bus = hashmapGetPrintf(ictx.opts, NULL, DISK_BUS_NAME);
-	if (bus)
+	bus = hashmapGetPrintf(ictx.opts, "", DISK_BUS_NAME);
+	if (strlen(bus) > 0)
 		put_string(fd, " androidboot.disk=%s", bus);
 	put_string(fd, "\n");
 	return true;
