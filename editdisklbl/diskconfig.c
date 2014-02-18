@@ -145,6 +145,11 @@ load_diskconfig(const char *fn, char *path_override)
     cnode *root = config_node("", "");
     const char *tmp;
 
+    if (root == NULL) {
+        ALOGE("Could not calloc root cnode");
+        return NULL;
+    }
+
     if (!(dinfo = malloc(sizeof(struct disk_info)))) {
         ALOGE("Could not malloc disk_info");
         return NULL;
@@ -171,7 +176,7 @@ load_diskconfig(const char *fn, char *path_override)
 
 
     if (!(tmp = config_str(devroot, "path", path_override))) {
-        ALOGE("device path is requried");
+        ALOGE("device path is required");
         goto fail;
     }
     dinfo->device = strdup(tmp);
