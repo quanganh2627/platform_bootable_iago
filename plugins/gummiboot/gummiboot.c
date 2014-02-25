@@ -151,7 +151,7 @@ static void gummiboot_execute(void)
 	xmkdir(BOOTLOADER_PATH "/EFI", 0777);
 	xmkdir(BOOTLOADER_PATH "/EFI/Boot", 0777);
 	fallback_efi = xasprintf(BOOTLOADER_PATH "/EFI/Boot/%s",
-			strcmp(KERNEL_ARCH, "x86_64") ? "bootia32.efi" : "bootx64.efi");
+			strcmp(UEFI_ARCH, "i386") ? "bootx64.efi" : "bootia32.efi");
 	copy_file(IMAGES_PATH "/shim.efi", fallback_efi);
 	free(fallback_efi);
 	nftw(BOOTLOADER_PATH "/loader", delete_cb, 64, FTW_DEPTH | FTW_PHYS);

@@ -228,7 +228,7 @@ $(iago_automated_bootimage): \
 			$(BOARD_MKBOOTIMG_ARGS) \
 			--output $@
 
-ifeq ($(TARGET_KERNEL_ARCH),i386)
+ifeq ($(TARGET_UEFI_ARCH),i386)
 efi_default_name := bootia32.efi
 else
 efi_default_name := bootx64.efi
